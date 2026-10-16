@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {sourceClubSide,normalizeClubActorQuery} from './club-query-identity.js';
+import {sourceClubSide,normalizeClubActorQuery,hasSourcePlayerReference} from './club-query-identity.js';
 const teams={home:'Northbridge',away:'Harbour Athletic'};
 const roster=[{id:'home-7',name:'J. Cole',team:'home'}];
 
@@ -20,4 +20,13 @@ test('unknown people and ambiguous club/player identities cannot become team que
  const collision=[...roster,{id:'away-9',name:'Northbridge',team:'away'}];
  assert.equal(sourceClubSide('Northbridge',teams,collision),null);
  const receiver={filters:{receiver:'Northbridge'},aggregate:'count'};assert.equal(normalizeClubActorQuery(receiver,teams,roster),receiver);
+});
+
+test('planner player mentions must be grounded in the fan or conversation',()=>{
+ const roster=[{id:'home-7',name:'J. Cole'},{id:'home-10',name:'A. Reed'}];
+ assert.ok(hasSourcePlayerReference('J. Cole',{question:'Did Cole help create the goal?'},roster));
+ assert.ok(hasSourcePlayerReference('J. Cole',{question:'What did he do?',conversation:[{answer:'J. Cole played the pass.'}]},roster));
+ assert.ok(hasSourcePlayerReference('Ronaldo',{question:'Is Ronaldo playing?'},roster));
+ assert.equal(hasSourcePlayerReference('A. Reed',{question:'Who is linking the play together?'},roster),false);
+ assert.equal(hasSourcePlayerReference('J. Cole',{question:'Was the collection clean?'},roster),false);
 });

@@ -346,3 +346,14 @@ test('ordered goal wording uses singular, grammatically matched labels in every 
   }
  }
 });
+test('complete shot inventories distinguish blocks, wide attempts, saves and unresolved outcomes',()=>{
+ const p=packet(),outcomes=['goal','saved','blocked','off-target','pending','unknown'];
+ const rows=outcomes.map((outcome,i)=>row({id:'shot-'+i,type:'shot',team:'home',playerId:'reed',player:'A. Reed',time:10+i,arrivedAt:10+i,result:outcome==='goal'?true:['pending','unknown'].includes(outcome)?null:false,outcome:outcome==='unknown'?null:outcome,...(outcome==='unknown'?{actionOutcome:{status:'unknown'}}:{})}));
+ p.requestedEvidence=[query('shots',{type:'shot'},[],{aggregate:'list',count:rows.length,rows})];
+ const manifest=buildQuestionFacts(p),fact=manifest.facts.find(f=>f.proof.kind==='shot-outcome-profile'&&f.proof.subjectId==='home');assert.ok(fact);
+ assert.equal(fact.proof.attempts,6);assert.deepEqual(fact.proof.counts,{goal:1,saved:1,blocked:1,'off-target':1,'on-target':0,pending:1,unknown:1});assert.match(fact.claim.text,/1 saved.*1 blocked.*1 off target.*1 pending.*1 outcome unknown/);
+ assert.equal(selectQuestionFacts(manifest,[fact.id]).claims[0].text,fact.claim.text);
+ for(const change of [s=>s.truncated=true,s=>s.rows.pop(),s=>s.scope.missingFields.outcome=1,s=>s.query.filters.outcome='saved',s=>s.rows[0].operation='delete',s=>s.rows[0].time=130,s=>s.rows[0].arrivedAt=130,s=>s.rows[1].id=s.rows[0].id]){
+  const bad=structuredClone(p);change(bad.requestedEvidence[0]);assert.equal(buildQuestionFacts(bad).facts.some(f=>f.proof.kind==='shot-outcome-profile'),false);
+ }
+});

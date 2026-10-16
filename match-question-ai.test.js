@@ -521,7 +521,7 @@ test('plain count and list queries cannot carry grouped sorting or bounds in the
   const [plain,grouped]=decisionBranch(request,'queries').properties.queries.items.anyOf;
   assert.deepEqual(plain.properties.groupCount,{type:'null'});assert.deepEqual(plain.properties.groupOrder,{type:'null'});
   assert.deepEqual(plain.properties.aggregate.anyOf[0].enum,['list','count']);assert.deepEqual(grouped.properties.aggregate.enum,['by-player','by-team','by-assister']);
-  assert.ok(grouped.properties.groupCount.anyOf.some(schema=>schema.type==='object'));
+  assert.deepEqual(grouped.properties.groupCount,{type:'null'});
  }
 });
 
@@ -1921,7 +1921,7 @@ test('composition wire enforces joint budgets and four canonical pending facts n
   explanations.forEach((mode,index)=>{
    assert.equal(mode.properties.factIds.minItems,index+1);assert.equal(mode.properties.factIds.maxItems,index+1);
    const [interpretation,nonInterpretive]=mode.properties.claim.anyOf;
-   assert.deepEqual(interpretation.properties.kind.enum,['interpretation']);assert.equal(interpretation.properties.dependsOn.minItems,1);assert.deepEqual(interpretation.properties.dependsOn.items.enum,Array.from({length:index+1},(_v,i)=>i));
+   assert.deepEqual(interpretation.properties.kind.enum,['interpretation']);assert.equal(interpretation.properties.dependsOn.minItems,index+1);assert.deepEqual(interpretation.properties.dependsOn.items.enum,Array.from({length:index+1},(_v,i)=>i));
    assert.deepEqual(nonInterpretive.properties.kind.enum,['limitation','general']);assert.equal(nonInterpretive.properties.dependsOn.maxItems,0);
   });
   const policy=body.messages[0].content;assert.match(policy,/Choose ONE composition mode/);assert.doesNotMatch(policy,/Every observation or interpretation needs|Return the required answer JSON schema|Select only fact IDs needed/);
@@ -2422,4 +2422,56 @@ test('sequence-specific player involvement retains relevant passing evidence and
  ]);
  const result=await answerMatchQuestionAI(question,{config,fetcher:mock.fetcher});
  assert.match(result.answer,/J\. Cole.*2/);assert.match(result.answer,/On completed passing, my pick so far is J\. Cole/);assert.doesNotMatch(result.answer,/shots/);assert.equal(result.execution.modelCalls,3);
+});
+test('ordinary rankings repair invented group thresholds before counting the full inventory',async()=>{
+ const question={kind:'sustained',seed:17,time:79,question:'Who received Northbridge’s passes most often?'};
+ const plan=bounds=>({answerFocus:'event-actor',requestedForm:'fact',mentionedPlayers:[],decision:{kind:'queries',queries:[{filters:{type:'receive',team:'home'},aggregate:'by-player',...(bounds?{groupCount:bounds}:{})}]}});
+ const mock=sequenceTransport([
+  plan({min:1,max:3}),
+  packet=>{assert.equal(packet.planningCorrection.kind,'unlicensed-group-bound');return plan(null);},
+  packet=>{const fact=packet.matchFacts.facts.find(f=>f.selection.kind==='count'&&f.selection.metric==='receptions'&&f.selection.subjectId==='home-10');assert.ok(fact);return {scope:'match',composition:{mode:'facts',factIds:[fact.id]},followUp:''};},
+  {decision:'approve',reason:'Reed leads the complete unrestricted home reception comparison.'}
+ ]);
+ const answer=await answerMatchQuestionAI(question,{config,fetcher:mock.fetcher,canRepair:()=>true});assert.equal(answer.execution.planningRepairs,1);assert.match(answer.answer,/A\. Reed.*2/);
+});
+test('an explicitly requested group threshold remains available exactly in the wire and answer',async()=>{
+ const question={kind:'sustained',seed:17,time:79,question:'Which Northbridge players have at least two completed passes?'};
+ const mock=sequenceTransport([
+  (_packet,body)=>{const grouped=decisionBranch(body,'queries').properties.queries.items.anyOf[1];const bounds=grouped.properties.groupCount.anyOf.find(s=>s.type==='object');assert.deepEqual(bounds.properties.min.enum,[2]);assert.deepEqual(bounds.properties.max,{type:'null'});return {requestedForm:'fact',mentionedPlayers:[],decision:{kind:'queries',queries:[{filters:{type:'pass',team:'home',result:true},aggregate:'by-player',groupCount:{min:2}}]}};},
+  packet=>{const fact=packet.matchFacts.facts.find(f=>f.selection.kind==='qualifying-groups');assert.ok(fact);return {scope:'match',composition:{mode:'facts',factIds:[fact.id]},followUp:''};},
+  {decision:'approve',reason:'Complete groups for the requested two-or-more completed passes predicate.'}
+ ]);
+ const answer=await answerMatchQuestionAI(question,{config,fetcher:mock.fetcher});assert.match(answer.answer,/J\. Cole.*2/);assert.equal(answer.execution.modelCalls,3);
+});
+test('multi-part role assessments cannot collapse to an unrelated one-fact team comparison',async()=>{
+ const question={kind:'sustained',seed:17,time:118,question:'Have the keepers actually been tested, or have most attempts missed?'};
+ const mock=sequenceTransport([
+  {answerFocus:'team-assessment',requestedForm:'assessment',mentionedPlayers:[],decision:{kind:'queries',queries:[{filters:{type:'shot'},aggregate:'by-team'},{filters:{type:'shot',outcome:'on-target'},aggregate:'by-team'}]}},
+  (packet,body)=>{
+   const modes=resolvedWireSchema(body).properties.composition.anyOf;assert.ok(modes.every(mode=>!mode.properties.mode.enum.includes('facts')));
+   assert.match(body.messages[0].content,/question-specific queries/);
+   const fact=packet.matchFacts.facts.find(f=>f.selection.kind==='shooting-profile'&&f.selection.subjectId==='home');assert.ok(fact);
+   return {scope:'match',composition:{mode:'explanation',factIds:[fact.id],claim:{text:'There have been on-target attempts, but overall keeper workload is not established by this shooting measure.',kind:'interpretation',evidence:[],dependsOn:[0]}},followUp:''};
+  },
+  (_packet,body)=>{assert.match(body.messages[0].content,/ball wins cannot substitute/);assert.match(body.messages[0].content,/never relevant but unselected context/);return {decision:'withhold',reason:'The answer still does not distinguish blocked attempts from off-target misses.'};}
+ ]);
+ await assert.rejects(answerMatchQuestionAI(question,{config,fetcher:mock.fetcher}),error=>error.code==='question-withheld');
+});
+test('inferred lineup names cannot turn an unnamed involvement request into named player assessments',async()=>{
+ const question={kind:'sustained',seed:17,time:79,question:"Who's linking Northbridge's play together rather than just taking the shots?"};
+ const mock=sequenceTransport([
+  {answerFocus:'player-assessment',explanationTarget:'observed-sequence',requestedForm:'assessment',mentionedPlayers:['A. Reed','J. Cole'],decision:{kind:'queries',queries:[{filters:{type:'pass',team:'home',result:true},aggregate:'by-player'}]}},
+  (packet,body)=>{assert.deepEqual(packet.mentionedPlayerResolution,[]);assert.deepEqual(resolvedWireSchema(body).properties.composition.anyOf.map(mode=>mode.properties.mode.enum[0]),['metric-player-pick']);const fact=packet.matchFacts.facts.find(f=>f.selection.kind==='count'&&f.selection.metric==='completedPasses'&&f.selection.subjectId==='home-7');return {scope:'match',composition:{mode:'metric-player-pick',playerId:'home-7',factIds:[fact.id]},followUp:''};},
+  {decision:'approve',reason:'A relevant explicitly qualified passing-involvement judgment.'}
+ ]);
+ const answer=await answerMatchQuestionAI(question,{config,fetcher:mock.fetcher});assert.match(answer.answer,/On completed passing/);assert.equal(answer.execution.modelCalls,3);
+});
+test('goal contribution review cannot invent an unasked temporal same-player relation',async()=>{
+ const question={kind:'sustained',seed:17,time:118,question:'Did Cole help create the goal, or was he just nearby?'};
+ const mock=sequenceTransport([
+  {answerFocus:'event-sequence',explanationTarget:'observed-sequence',requestedForm:'explanation',mentionedPlayers:['J. Cole'],decision:{kind:'queries',queries:[{filters:{type:'shot',result:true},aggregate:'list',order:'desc',limit:1}]}},
+  packet=>{const fact=packet.matchFacts.facts.find(f=>f.selection.kind==='credited-goal-assist');assert.ok(fact);return {scope:'match',composition:{mode:'explanation',factIds:[fact.id],claim:{text:'His credited assist establishes active involvement, rather than an inference from his position.',kind:'interpretation',evidence:[],dependsOn:[0]}},followUp:''};},
+  (packet,body)=>{const coverage=body.response_format.json_schema.schema.properties.requestCheck.properties.coverage.items.properties;assert.deepEqual(coverage.temporalRelation.enum,['none']);assert.deepEqual(coverage.relationEntityBinding.enum,['none']);return {decision:'approve',requestCheck:{status:'answered',requestedInformation:question.question,responseIntent:{purpose:'explanation',needsAssessment:true,needsExplicitCorrection:false,needsMeasurementLimitation:false,reason:'Credit establishes active contribution.'},coverage:packet.requestComponents.map(requestSpan=>({requestSpan,claimIndices:[0,1],answerForm:'explanation',requestedAction:'assist',temporalRelation:'none',relationAnchorClaimIndex:null,relationSourceLinkIndex:null,relationEntityBinding:'none'})),reason:'Credited assist and a concise supported conclusion.'}};}
+ ]);
+ const answer=await answerMatchQuestionAI(question,{config,fetcher:mock.fetcher});assert.match(answer.answer,/active involvement/);assert.equal(answer.execution.modelCalls,3);
 });

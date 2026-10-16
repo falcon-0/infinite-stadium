@@ -121,6 +121,20 @@ export function buildQuestionFacts(packet){
  };
  const complete=q=>refValid(q.scopeReference)&&q.truncated===false&&windowValid(q.query||{})&&Number.isSafeInteger(q.count)&&q.count>=0&&q.scope?.missingFields&&
   Object.values(q.scope.missingFields).every(n=>n===0)&&Object.keys(q.query?.groupCount||{}).length===0&&Object.values(q.entityResolution||{}).every(r=>r.status==='resolved');
+ // Full shot inventories establish outcome partitions. Blocks, wide attempts,
+ // saves and pending outcomes must never collapse into a generic "miss" count.
+ for(const source of queries){
+  const q=source.query,f=q?.filters||{},rows=source.rows;
+  if(!complete(source)||source.count===0||q.aggregate!=='list'||f.type!=='shot'||Object.keys(f).some(k=>!['type','team'].includes(k))||!Array.isArray(rows)||rows.length!==source.count||new Set(rows.map(row=>row.id)).size!==rows.length||rows.some(row=>row.type!=='shot'||!['home','away'].includes(row.team)||typeof row.id!=='string'||!Number.isSafeInteger(row.revision)||row.revision<1||!Number.isFinite(row.time)||row.time<q.timeFrom||row.time>q.timeTo||row.arrivedAt>now||row.operation==='delete'||f.team&&row.team!==f.team))continue;
+  for(const side of f.team?[f.team]:['home','away']){
+   const subset=rows.filter(row=>row.team===side),counts={goal:0,saved:0,blocked:0,'off-target':0,'on-target':0,pending:0,unknown:0};
+   for(const row of subset){const status=canonicalOutcome(row)?.status;counts[Object.hasOwn(counts,status)?status:'unknown']++;}
+   const labels={en:{goal:'goal',saved:'saved',blocked:'blocked','off-target':'off target','on-target':'on target (further outcome unknown)',pending:'pending',unknown:'outcome unknown'},es:{goal:'gol',saved:'parado',blocked:'bloqueado','off-target':'fuera','on-target':'a puerta (resultado desconocido)',pending:'pendiente',unknown:'resultado desconocido'},fr:{goal:'but',saved:'arrêté',blocked:'contré','off-target':'non cadré','on-target':'cadré (suite inconnue)',pending:'en attente',unknown:'résultat inconnu'},pt:{goal:'golo',saved:'defendido',blocked:'bloqueado','off-target':'fora','on-target':'à baliza (resultado desconhecido)',pending:'pendente',unknown:'resultado desconhecido'}}[language];
+   const breakdown=Object.entries(counts).filter(([,n])=>n>0).map(([status,n])=>`${n} ${labels[status]}`).join(', ');
+   const noun={en:'attempts',es:'remates',fr:'tirs',pt:'remates'}[language];
+   add(`${windowText(q)}${teams[side]}: ${subset.length} ${noun}${breakdown?' — '+breakdown:''}.`,[source.scopeReference],{kind:'shot-outcome-profile',metric:'shotOutcomes',subjectId:side,attempts:subset.length,counts,timeFrom:q.timeFrom,timeTo:q.timeTo,...windowFlags(q),scope:source.scopeReference,query:q,modelGenerated:false,doesNotProve:['keeper-identity','overall-workload','chance-quality']});
+  }
+ }
  const countFacts=[];
  for(const id of named){const p=player(id);if(!p)continue;
   const source=queries.find(q=>refValid(q.scopeReference)&&q.entityResolution?.player?.status==='resolved'&&q.entityResolution.player.canonicalId===id);
