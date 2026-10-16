@@ -5,7 +5,7 @@ import {resolve,dirname,basename} from 'node:path';
 import {existsSync,lstatSync} from 'node:fs';
 import {broadcastFrame} from './broadcast.js';
 import {integratedFeed} from './match-stream.js';
-import {serverSettings,modelBudget} from './server-settings.js';
+import {serverSettings,modelBudget,authorized} from './server-settings.js';
 import { readFile } from 'node:fs/promises';
 import { configuration, generateDraft, GenerationError } from './ai.js';
 import { sceneInvestigation } from './evidence.js';
@@ -49,6 +49,8 @@ function budgetFilename(value){
 }
 export function createServer({env=process.env,fetcher=fetch,localRunner,localStatusReader=localStatus,sharedBudget,sharedAccess}={}){
  const settings=serverSettings(env),filename=budgetFilename(env.MODEL_BUDGET_FILE);
+ const accessCode=env.APP_ACCESS_CODE;
+ if(accessCode!==undefined&&(typeof accessCode!=='string'||accessCode.length<6||accessCode.length>128||!settings.token))throw new Error('Invalid project access code configuration.');
  if(sharedBudget&&!(sharedBudget.durable===true&&typeof sharedBudget.snapshot==='function'&&typeof sharedBudget.take==='function'))throw new Error('Invalid shared model budget.');
  if(settings.publicHost&&env.AZURE_OPENAI_ENDPOINT&&env.AZURE_OPENAI_DEPLOYMENT&&env.AZURE_OPENAI_API_KEY&&!filename&&!sharedBudget)
   throw new Error('Public Azure hosting requires MODEL_BUDGET_FILE in the project .runtime directory. Mount that directory on persistent storage.');
@@ -90,7 +92,12 @@ export function createServer({env=process.env,fetcher=fetch,localRunner,localSta
    return;
   }
   if(path==='/api/access'&&['POST','DELETE'].includes(req.method)){
-   try{if(req.method==='POST')await access.authenticate(req,res);else await access.clear(req,res);json(res,200,{authenticated:req.method==='POST'||await access.status(req)});}
+   try{if(req.method==='POST'){
+    // A human-friendly project code creates the same opaque session. The
+    // internal bearer credential stays private and is never sent to browsers.
+    const login=accessCode&&authorized(req.headers.authorization,accessCode)?{headers:{...req.headers,authorization:`Bearer ${settings.token}`}}:req;
+    await access.authenticate(login,res);
+   }else await access.clear(req,res);json(res,200,{authenticated:req.method==='POST'||await access.status(req)});}
    catch(error){json(res,error instanceof GenerationError?error.status:500,{error:error instanceof GenerationError?error.message:'Unable to update AI access.'});}
    return;
   }

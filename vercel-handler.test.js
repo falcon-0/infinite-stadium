@@ -15,9 +15,10 @@ test('serverless routes serve the watch page but expose no private files and req
 });
 
 test('two serverless instances accept shared cookies, trusted aliases and already-parsed bodies',async t=>{
- const redis=memoryRedis(),runtime={...env,UPSTASH_REDIS_REST_URL:'https://test-redis.upstash.io',UPSTASH_REDIS_REST_TOKEN:'test-only-storage-token'};
+ const redis=memoryRedis(),runtime={...env,APP_ACCESS_CODE:'TESTER',UPSTASH_REDIS_REST_URL:'https://test-redis.upstash.io',UPSTASH_REDIS_REST_TOKEN:'test-only-storage-token'};
  const a=await start(t,createVercelHandler({env:runtime,storeFetcher:redis.fetcher})),b=await start(t,createVercelHandler({env:runtime,storeFetcher:redis.fetcher}),true);
- const login=await fetch(a+'/api/access',{method:'POST',headers:{Authorization:`Bearer ${env.APP_ACCESS_TOKEN}`,Origin:'https://preview.example'}});assert.equal(login.status,200);const cookie=login.headers.get('set-cookie').split(';')[0];
+ const wrong=await fetch(a+'/api/access',{method:'POST',headers:{Authorization:'Bearer WRONG!',Origin:'https://preview.example'}});assert.equal(wrong.status,401);
+ const login=await fetch(a+'/api/access',{method:'POST',headers:{Authorization:'Bearer TESTER',Origin:'https://preview.example'}});assert.equal(login.status,200);const cookie=login.headers.get('set-cookie').split(';')[0];
  const status=await fetch(b+'/api/ai/status',{headers:{Cookie:cookie}}).then(r=>r.json());assert.equal(status.authRequired,false);assert.equal(status.available,true);
  const response=await fetch(b+'/api/agent/question',{method:'POST',headers:{Cookie:cookie,Origin:'https://stadium.example','Content-Type':'application/json'},body:JSON.stringify({kind:'sustained',seed:17,time:0,question:'j'})});assert.equal(response.status,200);assert.equal((await response.json()).execution.modelCalls,0);
  const logout=await fetch(b+'/api/access',{method:'DELETE',headers:{Cookie:cookie,Origin:'https://stadium.example'}});assert.equal(logout.status,200);const revoked=await fetch(a+'/api/ai/status',{headers:{Cookie:cookie}}).then(r=>r.json());assert.equal(revoked.authRequired,true);

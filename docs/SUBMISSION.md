@@ -62,7 +62,7 @@ The final targeted probability regression released a supported shot outcome and 
 | Innovation Studio profile and challenge link | Created |
 | Public GitHub source URL | https://github.com/falcon-0/infinite-stadium |
 | Judge website or test-build URL | https://infinite-stadium-lime.vercel.app (AI requires private project access code) |
-| Public video URL | GitHub demo release asset: infinite-stadium-watch-studio-demo.mp4 (94.08 seconds, earlier genuine capture) |
+| Required public video URL | Pending YouTube upload; GitHub MP4 download is supplemental only |
 | Final category | Provisional Best Multi-Agent System; justify using measured benefit |
 | Final release commit | Pending freeze after final checks |
 | Live model availability through judging | Not secured by the expiring trial |
