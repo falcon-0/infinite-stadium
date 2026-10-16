@@ -1,0 +1,528 @@
+
+/* One story at a time: the result, its significance, and one replay action. */
+.match-chat { margin-top:22px;padding-top:18px;border-top:1px solid #3d413f; }
+.companion-modes { display:flex;gap:8px;margin-bottom:22px; }
+.companion-modes button { flex:1;font-size:12px; }
+.companion-modes button[aria-pressed=true] { background:#ceff22!important;color:#171817!important;border-color:#ceff22!important; }
+.watch-surface .match-chat { border:0;margin:0;padding:0; }
+.watch-surface .match-chat[hidden],.watch-insight-pane[hidden] { display:none!important; }
+.match-chat-heading { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+.match-chat-heading h3 { font-size:17px;margin:0 0 12px; }
+.match-chat-heading>span { font-size:10px;color:#b1b9b4; }
+.match-chat-input { display:flex;gap:8px; }
+.match-chat-input input { min-width:0;flex:1;border:1px solid #4f5451;border-radius:9px;background:#171817;color:#fff;padding:12px;font:inherit;font-size:13px; }
+.match-chat-input input:focus-visible { outline:2px solid #ceff22;outline-offset:2px; }
+.match-chat-input input::placeholder { color:#aeb8b1;opacity:1; }
+.match-chat-suggestions { display:flex;flex-wrap:wrap;gap:6px;margin-top:10px; }
+.match-chat-suggestions button.secondary { font-size:11px;padding:7px 9px;min-height:32px;background:transparent; }
+.match-chat [hidden] { display:none!important; }
+.match-chat [data-chat-status],.match-chat .disclosure { font-size:11px;line-height:1.5;color:#bac1bd; }
+.match-chat-response { font-size:15px;line-height:1.7; }
+.match-chat-moments { display:flex;flex-direction:column;gap:6px; }
+.match-chat-moments button { text-align:left;font-size:12px; }
+.match-chat details { font-size:11px;overflow-wrap:anywhere;margin-top:12px; }
+.match-chat details ul { padding-left:18px;line-height:1.7; }
+.studio-view>.match-chat,.studio-view .investigation>.match-chat { max-width:800px;margin:20px auto; }
+/* Production desk: a reviewed story package, then its local graphic output. */
+.studio-view { background:#121312; }
+.production-desk { padding:28px; margin:20px 0; border:1px solid #393e3b; border-radius:6px; background:#1a1c1b; }
+.production-heading { display:flex; gap:24px; justify-content:space-between; align-items:flex-start; }
+.production-heading h2 { font-size:32px; letter-spacing:-1px; margin:6px 0 10px; }
+.production-heading p:not(.eyebrow) { color:#bbc3be; max-width:65ch; line-height:1.65; }
+.production-journey { display:flex; flex-wrap:wrap; gap:12px 24px; padding:18px 0; list-style:none; color:#b6beb9; border-block:1px solid #393e3b; font-size:12px; }
+.production-toolbar,.production-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:18px 0; }
+.production-actions[hidden] { display:none; }
+.production-toolbar label { display:flex; gap:10px; align-items:center; font-size:12px; }
+.production-empty { padding:30px 0; color:#bbc3be; line-height:1.8; }
+.production-chance { padding:16px 0; }
+.production-chance h3 { font-size:25px; margin:12px 0; }
+.production-chance>p { color:#d2d7d4; line-height:1.7; }
+.production-status { color:#d4eaa4; font-size:12px; }
+.production-status[data-status=withdrawn] { color:#ffb39b; }
+.production-status[data-status=checking] { color:#ced4d1; }
+.production-sequence { display:flex; flex-wrap:wrap; gap:12px 22px; padding:0; list-style:none; font-size:13px; color:#dbdedc; }
+.production-sequence time { color:#b7beba; margin-right:6px; }
+.production-outputs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.production-outputs article { min-width:0; padding:20px; background:#212322; border:1px solid #414543; border-radius:10px; }
+.production-outputs article>p:not(.eyebrow) { font-size:16px; line-height:1.75; margin:18px 0; }
+.production-outputs .eyebrow { font-size:10px; color:#cacfcc; line-height:1.6; }
+.production-outputs small { font-size:11px; color:#b0b9b4; }
+.production-outputs details { margin-top:14px; font-size:11px; overflow-wrap:anywhere; }
+.production-outputs summary { cursor:pointer; color:#b6beb9; }
+.production-outputs ul { padding-left:16px; line-height:1.8; }
+.production-consent { flex-basis:100%; display:flex; align-items:center; gap:10px; color:#d1d5d3; font-size:13px; line-height:1.6; }
+.production-consent input { width:18px; height:18px; flex-shrink:0; }
+.production-correction { border-left:3px solid #ff996e; background:#38251f; padding:18px; margin:0 0 20px; }
+.production-correction h3 { margin:0 0 8px; font-size:18px; }.production-correction p { color:#f2d6cb; line-height:1.6; }
+.production-replacement { margin-top:18px; border-top:1px solid #8b6950; padding-top:14px; color:#ffdab9; font-size:13px; line-height:1.7; }
+.production-stage { margin-top:22px; padding:24px; min-height:180px; border-radius:10px; background:var(--panel); border:1px solid #355048; }
+.production-stage-label { color:#aaaebb; font-size:10px; letter-spacing:1.5px; margin:0 0 24px; }
+.production-stage [data-desk-graphic]>p { color:#bac1bd; font-size:15px; }
+.production-lower-third { max-width:760px; padding:18px 24px; background:#242625; border-left:5px solid #ceff22; border-radius:0 8px 8px 0; }
+.production-lower-third>span { font-size:11px; color:#ceff22; }
+.production-lower-third p { font-size:22px; font-weight:600; line-height:1.5; margin:8px 0 0; color:#fff; }
+.production-audit,.production-replay { margin:20px 0; color:#b9c1bc; font-size:12px; line-height:1.7; }
+.production-replay { padding:18px; border:1px solid #3e4240; border-radius:10px; }
+.production-replay>summary,.production-audit>summary { cursor:pointer; padding:8px 0; }
+.production-desk [hidden] { display:none!important; }
+.studio-view .match-score-strip { margin-block:12px; padding-block:12px; background:#202221; }
+.production-heading h2 { font-size:28px; margin:0 0 6px; }
+.production-heading p:not(.eyebrow) { margin:8px 0; }
+.production-journey { padding:12px 0; margin:14px 0; }
+.production-toolbar { margin:12px 0; }
+.production-chance { padding:8px 0; }
+.production-chance h3 { margin:8px 0; }
+.production-outputs article { padding:16px; }
+.production-outputs article>p:not(.eyebrow) { margin:12px 0; line-height:1.6; }
+.studio-view .viewer-tagline { display:none; }
+@media(max-width:900px){.production-outputs{grid-template-columns:1fr}.production-heading{display:block}.production-heading>.pill{display:inline-block;margin-top:12px}.production-desk{padding:18px}.production-heading h2{font-size:27px}.production-actions button{min-height:44px}.production-stage{padding:18px}.production-lower-third p{font-size:18px}}
+.fan-moment-card {
+  --moment-lime: #ceff22;
+  --moment-pink: #ff71aa;
+  --moment-text: #f4f6f5;
+  --moment-muted: #bfc5c1;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+  color: var(--moment-text);
+  overflow-wrap: anywhere;
+}
+.fan-moment-card [hidden] { display: none !important; }
+.fan-moment-card .fan-moment-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--moment-muted);
+}
+.fan-moment-card .fan-moment-card__state { display: inline-flex; align-items: center; gap: 7px; }
+.fan-moment-card .fan-moment-card__state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--moment-lime);
+}
+.fan-moment-card[data-state='selected'] .fan-moment-card__state::before { background: var(--moment-pink); }
+.fan-moment-card[data-state='loading'] .fan-moment-card__state::before,
+.fan-moment-card[data-state='unavailable'] .fan-moment-card__state::before { background: var(--moment-muted); }
+.fan-moment-card .fan-moment-card__time {
+  flex: none;
+  padding: 4px 7px;
+  background: #15161599;
+  border: 1px solid #585e5a;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  color: #eeefee;
+}
+:is(.fan-view,.studio-view,.developer-view) .investigation:has(#unified-title) .moment-panel .fan-moment-card .fan-moment-card__eyebrow {
+  margin: 0 0 7px;
+  font-size: 9px;
+  line-height: 1.4;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--moment-muted);
+}
+:is(.fan-view,.studio-view,.developer-view) .investigation:has(#unified-title) .moment-panel .fan-moment-card .fan-moment-card__title {
+  margin: 0 0 12px;
+  font-family: system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-size: clamp(23px, 2.1vw, 31px);
+  line-height: 1.15;
+  letter-spacing: -.8px;
+  font-weight: 700;
+  text-wrap: balance;
+  color: var(--moment-text);
+}
+:is(.fan-view,.studio-view,.developer-view) .investigation:has(#unified-title) .moment-panel .fan-moment-card .fan-moment-card__summary {
+  margin: 0 0 18px;
+  color: #d0d4d2;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.fan-moment-card .fan-moment-card__meaning {
+  margin: 18px 0 0;
+  padding: 13px 0 0 13px;
+  border-top: 1px solid #474d4a;
+  border-left: 2px solid var(--moment-lime);
+}
+.fan-moment-card[data-kind='goal'] .fan-moment-card__meaning { border-left-color: var(--moment-pink); }
+.fan-moment-card .fan-moment-card__why-label {
+  margin: 0 0 6px;
+  color: var(--moment-lime);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .15px;
+}
+:is(.fan-view,.studio-view,.developer-view) .investigation:has(#unified-title) .moment-panel .fan-moment-card .fan-moment-card__why {
+  margin: 0;
+  color: var(--moment-text);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.fan-moment-card .fan-moment-card__actions { margin-top: 18px; }
+.fan-moment-card .fan-moment-card__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 12px;
+  min-width: 0;
+  margin: 15px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid #474d4a;
+}
+.fan-moment-card .fan-moment-card__metrics[data-count='1'] { grid-template-columns: minmax(0,1fr); }
+.fan-moment-card .fan-moment-card__metric { min-width: 0; overflow-wrap: anywhere; }
+.fan-moment-card .fan-moment-card__metric-label {
+  margin: 0 0 5px;
+  color: var(--moment-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.fan-moment-card .fan-moment-card__metric-value {
+  margin: 0;
+  color: var(--moment-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+.fan-moment-card .fan-moment-card__watch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #707873;
+  border-radius: 6px;
+  background: #383d3a;
+  color: #fff;
+  white-space: normal;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color .15s, border-color .15s;
+}
+.fan-moment-card .fan-moment-card__watch:not(:disabled):hover { background: #474c49; border-color: #afb7b2; }
+.fan-moment-card .fan-moment-card__watch:disabled { opacity: .6; cursor: wait; }
+.fan-moment-card .fan-moment-card__watch[data-replaying='true'] { border-color: var(--moment-pink); }
+.fan-moment-card .fan-moment-card__action-icon { color: var(--moment-lime); font-size: 10px; }
+.fan-moment-card .fan-moment-card__detail { margin: 15px 0 0; border: 0; padding: 0; background: transparent; }
+.fan-moment-card .fan-moment-card__detail-label {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 8px 0;
+  border: 0;
+  cursor: pointer;
+  color: var(--moment-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+:is(.fan-view,.studio-view,.developer-view) .investigation:has(#unified-title) .moment-panel .fan-moment-card .fan-moment-card__detail-copy,
+:is(.fan-view,.studio-view,.developer-view) .investigation:has(#unified-title) .moment-panel .fan-moment-card .fan-moment-card__detail-items {
+  margin: 3px 0 10px;
+  color: var(--moment-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.fan-moment-card .fan-moment-card__detail-items { padding-left: 18px; }
+.fan-moment-card__sequence { list-style:none; padding:4px 0; margin:14px 0; border-top:1px solid #3e4340; }
+.fan-moment-card__sequence li { display:grid; grid-template-columns:42px 1fr; gap:12px; padding:10px 0; font-size:13px; line-height:1.5; color:#e2e5e3; }
+.fan-moment-card__step-time { color:#b5bcb8; font-variant-numeric:tabular-nums; font-size:11px; padding-top:2px; }
+.fan-moment-card .fan-moment-card__detail-items li + li { margin-top: 5px; }
+.fan-moment-card .fan-moment-card__watch:focus-visible,
+.fan-moment-card .fan-moment-card__detail-label:focus-visible { outline: 2px solid var(--moment-lime); outline-offset: 4px; }
+@media(max-width:520px) {
+  .fan-moment-card .fan-moment-card__meta { margin-bottom: 15px; }
+  .fan-moment-card .fan-moment-card__watch { width: 100%; }
+  .fan-moment-card .fan-moment-card__detail-label { min-height: 44px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .fan-moment-card .fan-moment-card__watch { transition: none; }
+}
+
+/* Fan match centre. Original styling guided by the user's dark sports reference. */
+.fan-view { --bg:#0e0f0e; --panel:#1a1b1a; --line:#2c302e; --muted:#a5afa9; --lime:#79c79e; background:var(--bg); color:#f5f6f5; }
+.fan-view .app-sidebar { height:72px; padding:0 28px; gap:24px; background:#151615; border-bottom:1px solid #272a28; }
+.fan-view .app-sidebar .brand { font:700 16px system-ui,-apple-system,'Segoe UI',sans-serif; letter-spacing:-.3px; display:flex; align-items:center; gap:10px; }
+.fan-view .app-sidebar .brand::first-letter { color:var(--lime); }
+.fan-view .app-sidebar .view-navigation { align-self:center; gap:8px; }
+.fan-view .app-sidebar .view-navigation a { padding:12px 24px; border-radius:6px; font-size:13px; color:#bbc2be; }
+.fan-view .app-sidebar .view-navigation a[aria-current=page] { color:#eff4ef; background:#243b2e; box-shadow:inset 0 -2px #79c79e; }
+.fan-view .app-sidebar .view-navigation a:hover { background:#343735; color:#fff; }
+.fan-view>main { max-width:1600px; padding:24px 28px 0; }
+.fan-view>main.fan-layout { display:grid; grid-template-columns:200px minmax(0,1fr); gap:24px; align-items:start; }
+.fan-layout>.match-lobby,.fan-layout>.watch-surface,.fan-layout>footer { grid-column:2; min-width:0; }
+.fan-layout>.match-browser { grid-column:1; grid-row:1 / span 2; }
+.fan-view h1,.fan-view h2,.fan-view h3 { font-family:system-ui,-apple-system,'Segoe UI',sans-serif; }
+.fan-view button { min-height:42px; border-radius:5px; background:var(--lime); border-color:var(--lime); color:#10261b; }
+.fan-view button.secondary,.fan-view select { border-radius:8px; background:#252726; border-color:#3a3f3c; color:#f0f2f1; }
+.fan-view button:hover { filter:brightness(1.08); }
+.fan-view :is(button,a,select,input,summary):focus-visible { outline:2px solid var(--lime); outline-offset:3px; }
+.fan-view .club-badge { width:34px; height:38px; border-radius:6px 6px 12px 12px; background:#ceff22; color:#172000; font-size:15px; }
+.fan-view .club-badge.away { background:#ff438d; color:#fff; }
+.fan-view footer { margin-top:16px; padding:22px 0; gap:12px; border-color:var(--line); font-size:10px; letter-spacing:0; color:#929e97; }
+/* Desktop navigation: real fixture links, no unrelated leagues or controls. */
+.match-browser { background:transparent; border:0; border-right:1px solid var(--line); border-radius:0; overflow:hidden; }
+.match-browser-heading { display:flex; align-items:center; gap:10px; padding:20px 16px; border-bottom:1px solid var(--line); }
+.match-browser-heading h2 { font-size:14px; margin:0; letter-spacing:0; }
+.library-symbol { color:var(--lime); font-size:20px; }
+.match-browser-label { padding:18px 16px 8px; margin:0; color:#a5afa9; font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; }
+.match-browser ul { padding:0 8px; margin:0; list-style:none; }
+.match-browser li+li { border-top:1px solid #ffffff06; }
+.match-browser li a { display:flex; align-items:center; gap:10px; min-height:76px; padding:12px 8px; color:#bbc3be; text-decoration:none; border-radius:9px; }
+.match-browser li a:hover { background:#252726; }
+.match-browser li a[aria-current=page] { background:#1e2c24; color:#fff; box-shadow:inset 2px 0 #79c79e; }
+.match-browser strong { display:block; font-size:11px; font-weight:600; line-height:1.5; }
+.match-browser small { display:block; font-size:10px; line-height:1.5; color:#9ba6a0; }
+.rail-club-pair { display:flex; flex:0 0 34px; align-items:center; }
+.rail-club-pair b { display:grid; place-items:center; width:23px; height:26px; border-radius:7px; background:#353b20; border:2px solid #191b1a; color:#d0f54a; font-size:10px; }
+.rail-club-pair b+b { margin-left:-10px; background:#422535; color:#ff87b7; }
+.match-browser-all { display:flex; justify-content:space-between; padding:18px 16px; margin-top:8px; border-top:1px solid var(--line); color:#dfe2e0; font-size:11px; text-decoration:none; }
+.match-browser-note { padding:4px 16px 18px; margin:0; font-size:12px; line-height:1.6; color:#a5afa9; }
+/* Fixture selection: compact, readable rows within one match panel. */
+.match-lobby { margin:0; padding:0 0 20px; max-width:none; }
+.lobby-kicker { margin:4px 0 8px; font-size:10px; font-weight:700; letter-spacing:.13em; color:#b2bab5; }
+.match-lobby h1 { margin:0 0 10px; font-size:30px; font-weight:700; letter-spacing:-.8px; }
+.lobby-intro { margin:0 0 24px; color:#aab2ad; font-size:14px; line-height:1.7; }
+.match-list { margin:0; padding:0; list-style:none; border:1px solid var(--line); background:#1a1b1a; border-radius:8px; overflow:hidden; }
+.match-list>li+li { border-top:1px solid var(--line); }
+.match-row { display:grid; grid-template-columns:115px minmax(0,1fr) 80px; align-items:center; gap:20px; min-height:94px; padding:18px 24px; text-decoration:none; color:#f5f6f5; }
+.match-row:hover { background:#222423; }
+.match-row-status { font-size:10px; line-height:1.5; color:#9ca7a1; }
+.match-row-clubs { display:grid; grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr); align-items:center; gap:14px; font-size:13px; font-weight:600; }
+.match-row-team { display:flex; gap:12px; align-items:center; min-width:0; }
+.match-row-team .club-badge { flex-shrink:0; }
+.match-row-team.home { flex-direction:row; text-align:left; }
+.match-versus { color:#79817c; text-align:center; font-size:10px; }
+.match-row-enter { display:flex; gap:12px; align-items:center; justify-content:flex-end; color:#cbd1ce; font-size:12px; }
+.match-row-enter>span { color:var(--lime); font-size:18px; }
+.match-row-description { display:none; }
+.lobby-note { font-size:11px; color:#839088; margin-top:18px; }
+/* Viewing layout: low visual noise around the field. */
+body.fan-view .investigation.watch-surface:has(#unified-title)>.audience-heading { display:flex!important; align-items:center; flex-wrap:wrap; gap:12px; margin:0 0 20px; padding:0; border:0; }
+body.fan-view .investigation.watch-surface:has(#unified-title) #unified-title { font-size:17px; font-weight:600; letter-spacing:-.3px; margin:0; }
+.fan-view .audience-heading .eyebrow { display:none; }
+.all-matches { color:#94a099; text-decoration:none; font-size:12px; }
+body.fan-view .investigation.watch-surface:has(#unified-title)>.audience-heading .pill { font-size:8px; letter-spacing:.06em; color:#abb3ae; border:1px solid #3b403d; border-radius:5px; background:#222423; padding:5px 7px; }
+.watch-language { display:flex; align-items:center; gap:8px; margin-left:auto; color:#9ba6a0; font-size:11px; }
+.watch-language select { min-height:34px; padding:7px 9px; margin:0; font-size:11px; }
+body.fan-view .investigation.watch-surface:has(#unified-title)>.workspace { grid-template-columns:minmax(0,1fr) 320px; gap:22px; align-items:start; }
+body.fan-view .investigation.watch-surface:has(#unified-title) .workspace .match-score-strip { background:var(--panel); border:0; border-bottom:1px solid var(--line); border-radius:4px 4px 0 0; box-shadow:none; padding:12px 20px; margin:0 0 10px; gap:16px; min-height:88px; }
+body.fan-view .match-score-strip::before,body.fan-view .match-score-strip::after { display:none; }
+body.fan-view .investigation.watch-surface:has(#unified-title) .workspace .score-club { font-size:13px; line-height:1.4; gap:12px; }
+body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre #unified-score { font-family:system-ui,-apple-system,'Segoe UI',sans-serif; font-size:34px; font-weight:700; letter-spacing:1px; line-height:1.2; }
+body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre { gap:2px; }
+body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre #unified-clock { background:#181918; color:#c1c8c4; font-size:12px; padding:3px 9px; margin-top:2px; border-radius:6px; }
+body.fan-view .investigation.watch-surface:has(#unified-title) .pitch-legend { gap:14px; font-size:12px; color:#b6bfb9; margin:0; padding:0 0 8px; }
+.watch-stage { display:grid; grid-template-columns:minmax(0,1fr); border:1px solid #2b3634; border-radius:6px; overflow:hidden; background:#174a39; }
+.fan-view .watch-stage #unified-pitch { grid-row:2; }
+body.fan-view .investigation.watch-surface:has(#unified-title) .watch-stage #unified-pitch { display:block; width:100%; height:auto; aspect-ratio:1110 / 720; max-height:none; min-height:0; margin:0; border:0; border-radius:0; box-shadow:none; }
+.watch-stats { grid-row:1; padding:14px 10px; background:#1b1c1b; border-bottom:1px solid #2b3634; }
+.watch-stats table { display:block; width:100%; text-align:center; border-collapse:collapse; }
+.watch-stats caption,.watch-stats thead { display:none; }
+.watch-stats tbody { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+.watch-stats tbody tr { display:grid; grid-template-columns:1fr 1fr; border:0; }
+.watch-stats tbody tr+tr { border-left:1px solid var(--line); }
+.watch-stats tbody th { grid-column:1/-1; grid-row:1; font-size:9px; font-weight:400; color:#a3aca7; }
+.watch-stats td { font-size:15px; font-weight:700; padding:6px 2px 0; font-variant-numeric:tabular-nums; }
+.watch-stats td:first-child { color:#d0f54a; }.watch-stats td:last-child { color:#ff68a4; }
+.fan-view #unified-scene-caption,.fan-view .watch-fixture-note { display:none; }
+.replay-progress { padding:8px 2px; }
+.replay-progress { display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px; }
+.replay-progress .replay-time { color:#bcc7c0;font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap; }
+.fan-view .watch-story-banner { padding:18px 0; margin:12px 0 0; background:transparent; border:0; border-top:1px solid var(--line); border-radius:0; }
+.watch-story-banner .fan-moment-card { background:none; border:0; padding:0; box-shadow:none; }
+.watch-story-banner :is(.fan-moment-card__meta,.fan-moment-card__eyebrow,.fan-moment-card__why-label,.fan-moment-card__detail,.fan-moment-card__metrics) { display:none; }
+body.fan-view .watch-story-banner #unified-explanation .moment-title,.watch-story-banner .fan-moment-card__title { font-size:17px; font-weight:600; letter-spacing:-.3px; line-height:1.5; margin:0 0 6px; }
+.watch-story-banner .fan-moment-card__summary,.watch-story-banner .fan-moment-card__why { font-size:13px; line-height:1.7; color:#b8c0bb; margin:0; }
+.watch-story-banner .fan-moment-card__meaning { margin:8px 0 0; padding:0; border:0; }
+.watch-story-banner .fan-moment-card__actions { margin-top:12px; }
+/* AI companion uses a conversation surface and a single composer. */
+body.fan-view .investigation.watch-surface:has(#unified-title) .moment-panel.watch-conversation { margin:0; padding:8px 0 20px 22px; min-height:360px; background:transparent; border:0; border-left:1px solid var(--line); border-radius:0; box-shadow:none; }
+.watch-conversation .match-chat-heading { display:flex; flex-wrap:wrap; gap:6px 10px; padding:0 0 18px; margin-bottom:20px; border-bottom:1px solid var(--line); }
+.watch-conversation .match-chat-heading h3 { font-size:17px; font-weight:600; margin:0; letter-spacing:-.3px; }
+.watch-conversation .match-chat-heading>span { font-size:10px; color:#97a19b; }
+.watch-conversation .match-chat-input { display:flex; flex-wrap:wrap; gap:6px; padding:5px; border:1px solid #454a47; background:#242725; border-radius:6px; }
+.watch-conversation .match-chat-input:focus-within { border-color:#79c79e; }
+.watch-conversation .match-chat-input input { flex:1 1 120px; width:0; min-width:0; min-height:44px; padding:10px 8px; background:transparent; border:0; border-radius:8px; color:#f4f6f5; font-size:16px; }
+.watch-conversation .match-chat-input button { min-height:40px; padding:9px 12px; border-radius:8px; }
+.watch-conversation .match-chat-input [data-chat-cancel] { flex-basis:100%; }
+body.fan-view .investigation.watch-surface:has(#unified-title) .watch-conversation :is(.disclosure,[data-chat-status]) { font-size:12px; line-height:1.7; color:#aab4ad; }
+.watch-conversation [data-chat-status]:empty { display:none; }
+.watch-conversation [data-chat-answer] { max-height:min(55vh,500px); overflow:auto; scrollbar-gutter:stable; }
+.watch-conversation .match-chat-turn { border:0; border-radius:0; background:none; padding:18px 0; border-bottom:1px solid var(--line); }
+.watch-conversation .match-chat-turn:first-child { padding-top:0; }
+.watch-conversation [data-chat-answer]:not(:empty)+form { margin-top:20px; }
+body.fan-view .investigation.watch-surface:has(#unified-title) .watch-conversation .match-chat-response p { font-size:14px; line-height:1.8; color:#e5e8e6; }
+.watch-conversation .match-chat-response p:first-child { margin-top:0; }.watch-conversation .match-chat-response p:last-child { margin-bottom:0; }
+.match-exploration { margin-top:20px; border-top:1px solid var(--line); }
+.fan-view .match-exploration>details { border:0; border-radius:0; background:none; padding:12px 0; margin:0; }
+.fan-view .match-exploration>details>summary { font-size:12px; color:#a8b2ac; border:0; }
+@media(max-width:1250px) {
+ .fan-view>main.fan-layout { grid-template-columns:1fr; }.fan-layout>.match-browser { display:none; }.fan-layout>.match-lobby,.fan-layout>.watch-surface,.fan-layout>footer { grid-column:1; }
+}
+@media(max-width:950px) {
+ body.fan-view .investigation.watch-surface:has(#unified-title)>.workspace { grid-template-columns:1fr; gap:20px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title)>.workspace>.moment-panel { grid-column:1; grid-row:2; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .moment-panel.watch-conversation { min-height:0; padding:22px 0 0; border-left:0; border-top:1px solid var(--line); }
+ .match-row { grid-template-columns:90px minmax(0,1fr) 64px; gap:12px; padding:18px; }
+}
+@media(max-width:600px) {
+ .fan-view .app-sidebar { height:64px; padding-inline:16px; gap:10px; }.fan-view .app-sidebar .brand { font-size:12px; }.fan-view .app-sidebar .view-navigation a { padding:10px 14px; font-size:12px; }
+ .fan-view>main { padding:18px 16px 0; }.fan-view>main.fan-layout { gap:0; }
+ body.fan-view .investigation.watch-surface:has(#unified-title)>.audience-heading { display:flex!important; gap:10px; margin-bottom:18px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) #unified-title { font-size:14px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title)>.audience-heading .pill { font-size:7px; }
+ .all-matches { font-size:11px; }.watch-language { width:100%; margin-left:0; justify-content:flex-end; margin-top:-2px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .workspace .match-score-strip { padding:18px 12px; min-height:100px; gap:10px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .workspace .score-club { flex-direction:column; text-align:center; font-size:11px; gap:8px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .workspace .score-club.away { flex-direction:column-reverse; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre #unified-score { font-size:30px; }.fan-view .club-badge { width:28px; height:32px; font-size:13px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .pitch-legend { gap:10px; font-size:11px; }
+ .watch-stats { padding:12px 6px; }.watch-stats tbody { gap:0; }.watch-stats td { font-size:14px; }.watch-stats tbody th { font-size:8px; }
+ .fan-view .watch-story-banner { padding:18px 0; }.match-lobby h1 { font-size:26px; }.lobby-intro { font-size:13px; }
+ .match-row { grid-template-columns:minmax(0,1fr) 50px; gap:8px; padding:16px; }.match-row-status { grid-column:1/-1; font-size:9px; }.match-row-clubs { grid-column:1; font-size:11px; gap:8px; }.match-row-team { gap:7px; }.match-row-enter { font-size:11px; }
+ .fan-view footer { flex-wrap:wrap; line-height:1.7; }
+}
+/* Compact header and a quiet conversational empty state. */
+.match-chat-welcome { display:none; }
+.watch-conversation .match-chat { min-height:320px; display:flex; flex-direction:column; }
+.watch-conversation .match-chat [data-chat-answer] { flex:1; }
+.watch-conversation .match-chat [data-chat-answer]:empty { display:none; }
+.watch-conversation .match-chat-welcome { flex:1; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:12px 0 32px; }
+.watch-conversation .match-chat-welcome>span { display:grid; place-items:center; width:32px; height:32px; margin-bottom:16px; background:transparent; color:var(--lime); border-radius:0; font-size:25px; }
+body.fan-view .investigation.watch-surface:has(#unified-title) .watch-conversation .match-chat-welcome p { margin:0 0 8px; font-size:16px; font-weight:500; line-height:1.5; color:#e5e7e6; }
+.watch-conversation .match-chat-welcome small { font-size:12px; line-height:1.7; color:#95a09a; max-width:28ch; }
+@media(max-width:700px) {
+ .fan-view>main { padding-top:12px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title)>.audience-heading { display:grid!important; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin-bottom:12px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title)>.audience-heading .pill { max-width:none; white-space:nowrap; }
+ .fan-view .all-matches { grid-column:1; grid-row:1; }.fan-view .watch-language { grid-column:2; grid-row:1; width:auto; margin:0; }
+ .fan-view .audience-heading>div { grid-column:1; grid-row:2; }.fan-view .audience-heading>.pill { grid-column:2; grid-row:2; justify-self:end; }
+ .watch-conversation .match-chat { min-height:270px; }
+}
+
+/* Review fixes: readable compact labels and content-sized conversation turns. */
+.watch-conversation .match-chat-turn { min-height:0; }
+.watch-conversation [data-chat-new-answer]+form { margin-top:16px; }
+.watch-stats tbody th { font-size:11px; }
+.match-browser strong { font-size:12px; }
+.match-browser small,.match-browser-all { font-size:12px; }
+@media(min-width:951px) {
+ /* Spend the saved chrome height on the field, retaining the action headline. */
+ .fan-view .app-sidebar { height:56px; }
+ .fan-view>main { padding-top:12px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title)>.audience-heading { margin-bottom:10px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .watch-language select { min-height:34px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .workspace .match-score-strip { min-height:64px; padding:8px 16px; margin-bottom:8px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre { flex-direction:row; gap:10px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre #unified-score { font-size:30px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre #unified-clock { margin-top:0; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .pitch-legend { padding-bottom:6px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .watch-stage #unified-pitch { max-height:clamp(280px,calc(100dvh - 385px),560px); }
+ .fan-view .watch-stats { padding-block:6px; }
+ .fan-view .replay-progress { padding-block:4px; }
+ .fan-view .watch-story-banner { padding-block:10px; margin-top:8px; }
+}
+@media(max-width:600px) {
+ .watch-stats tbody th { font-size:10px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title)>.audience-heading .pill { font-size:9px; }
+ .fan-view .pitch-legend .controls { flex-wrap:nowrap; width:auto; margin-left:auto; }
+ .fan-view .pitch-legend .controls button { width:auto; flex-basis:auto; padding:9px 12px; }
+}
+
+/* Keep the narrow watch view focused on play instead of repeated onboarding. */
+.watch-story-banner:has(.fan-moment-card[data-state="ready"]) { display:none; }
+@media(max-width:700px) {
+ body.fan-view .investigation.watch-surface:has(#unified-title) .workspace .match-score-strip { min-height:76px; padding:12px; margin-bottom:10px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre #unified-score { font-size:28px; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .workspace .score-club { font-size:11px; gap:6px; }
+ .watch-stats { padding:8px 6px; }
+ .watch-conversation .match-chat { min-height:0; }
+ .watch-conversation .match-chat-welcome { padding:0 0 14px; }
+ .watch-conversation .match-chat-heading { padding-bottom:10px; margin-bottom:12px; }
+}
+
+/* On a single-column watch page the pitch stays in view while reading chat.
+   display:contents removes the short column's sticky boundary; the workspace
+   supplies the boundary, including the conversation. No cloned video or clock. */
+@media(max-width:950px) and (min-height:500px) {
+ body.fan-view .investigation.watch-surface:has(#unified-title)>.workspace { display:flex; flex-direction:column; gap:0; }
+ body.fan-view .investigation.watch-surface:has(#unified-title)>.workspace>div:first-child { display:contents; }
+ .fan-view .watch-stage { position:sticky; top:0; z-index:5; width:100%; flex:none; box-shadow:0 8px 18px #0005; }
+ body.fan-view .investigation.watch-surface:has(#unified-title) .watch-stage #unified-pitch { height:auto; width:100%; aspect-ratio:1110 / 720; max-height:min(34svh,340px); }
+ .fan-view .watch-conversation { width:100%; }
+ .fan-view .watch-story-banner { width:100%; }
+ .fan-view .replay-progress { width:100%; }
+ .fan-view .watch-conversation input { scroll-margin-top:calc(34svh + 110px); }
+}
+
+.watch-mini-score { display:none; }
+@media(max-width:950px) and (min-height:500px) {
+ .watch-mini-score { display:flex; align-items:center; gap:10px; padding:6px 10px; background:#151716; color:#dce4df; font-size:11px; line-height:1.5; }
+ .watch-mini-score span { flex:1; font-variant-numeric:tabular-nums; }
+ .watch-mini-score button { flex:none; padding:6px 10px; min-height:32px; }
+ .fan-view .watch-stage { display:flex; flex-direction:column; }
+ .fan-view .watch-stage .watch-stats { width:100%; }
+}
+
+@media(max-width:950px) and (min-height:500px) {
+ body.fan-view .investigation.watch-surface:has(#unified-title) .workspace .match-score-strip { display:none; }
+ /* The compact score already identifies both teams and owns playback. */
+ .fan-view .watch-surface .pitch-legend { display:none; }
+ .watch-conversation .match-chat-welcome { display:none; }
+ .watch-mini-score { font-size:12px; }
+}
+
+/* Viewing choices stay one disclosure away from the match. */
+body.fan-view .investigation.watch-surface:has(#unified-title){position:relative}
+body.fan-view .investigation.watch-surface:has(#unified-title)>.audience-heading{padding-right:170px;min-height:44px}
+body.fan-view .investigation.watch-surface:has(#unified-title)>.watch-view-options{margin:0;padding:0;border:0;background:transparent}
+body.fan-view .investigation.watch-surface:has(#unified-title)>.watch-view-options>summary{position:absolute;right:0;top:0;min-height:44px;padding:11px 14px;border:1px solid #38443d;border-radius:7px;background:#191e1b;color:#e6ece8;font-size:13px;cursor:pointer;width:auto}
+body.fan-view .watch-view-options>summary:focus-visible{outline:2px solid #72df9b;outline-offset:3px}
+body.fan-view .watch-view-options[open]{margin-bottom:16px!important;padding:16px!important;border:1px solid #38443d!important;border-radius:8px!important;background:#161b18!important}
+body.fan-view .watch-view-options .demo-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:0}
+body.fan-view .watch-view-options label{display:flex;flex-direction:column;gap:7px;color:#bbc7bf;font-size:13px}
+body.fan-view .watch-view-options label[hidden]{display:none}
+body.fan-view .watch-view-options select{width:100%;min-height:44px;font-size:16px;background:#101512;color:#f0f5f2;border:1px solid #435249;border-radius:6px;padding:8px}
+body.fan-view .watch-view-options .view-options-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+body.fan-view .watch-view-options button{min-height:44px}
+body.fan-view .watch-view-options .apply-view{background:#75dfa0;color:#102018;border:0}
+body.fan-view .watch-view-options p:empty{display:none}
+body.fan-view .player-follow-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+body.fan-view .player-follow-heading span{font-size:11px;color:#a6b6ac;font-variant-numeric:tabular-nums}
+body.fan-view .player-follow-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0 0}
+body.fan-view .player-follow-stats dt{font-size:11px;color:#a6b6ac}
+body.fan-view .player-follow-stats dd{margin:3px 0 0;font-size:20px;font-weight:650}
+@media(max-width:950px){
+ body.fan-view .investigation.watch-surface:has(#unified-title)>.audience-heading{padding-right:0}
+ body.fan-view .audience-heading .all-matches{min-height:44px;display:flex;align-items:center}
+}
+@media(max-width:520px){body.fan-view .watch-view-options .demo-controls{grid-template-columns:1fr}}
+@media(max-width:950px){
+ body.fan-view .player-spotlight{margin-bottom:8px;padding-left:10px}
+ body.fan-view .watch-story-banner{padding-block:10px}
+ body.fan-view .player-spotlight .player-follow-heading{font-size:13px;line-height:1.4}
+ body.fan-view .player-spotlight .focus-label{font-size:12px;line-height:1.4;margin:2px 0 4px}
+ body.fan-view .player-follow-stats{display:flex;gap:12px;flex-wrap:wrap;margin:0;line-height:1.4}
+ body.fan-view .player-follow-stats>div{display:flex;gap:5px;align-items:baseline}
+ body.fan-view .player-follow-stats dt{font-size:10px}
+ body.fan-view .player-follow-stats dd{font-size:12px;margin:0}
+}

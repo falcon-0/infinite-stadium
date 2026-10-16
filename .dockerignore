@@ -1,0 +1,10 @@
+.env
+.env.*
+.git
+node_modules
+artifacts
+docs
+*.test.js
+.venv
+__pycache__
+.runtime

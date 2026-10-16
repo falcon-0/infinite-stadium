@@ -1,0 +1,100 @@
+name: Verify without model calls
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Node 24 / Python 3.12 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      # This workflow never supplies model credentials or starts model inference.
+      AZURE_OPENAI_ENDPOINT: ""
+      AZURE_OPENAI_DEPLOYMENT: ""
+      AZURE_OPENAI_API_KEY: ""
+      PYTHONUTF8: "1"
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # The default application and packaging tools use standard libraries.
+      # The optional local AI SDK/runtime is intentionally not installed here.
+      - name: Run Node tests with bounded concurrency
+        run: node --test --test-concurrency=4 ./*.test.js
+
+      - name: Test source packaging
+        run: python -m unittest package_judge_test.py
+
+      - name: Validate synthetic data contracts
+        run: node fixture-validation-cli.js
+
+      - name: Compare match clocks, statistics and AI query scopes
+        run: node catalogue-evaluation-cli.js
+
+      - name: Evaluate recorded moment templates without models
+        run: node evaluation-cli.js --adapter=template
+
+      - name: Evaluate recorded recap templates without models
+        run: node recap-evaluation-cli.js --adapter=template
+
+      - name: Build the source archive
+        run: python package_judge.py
+
+      - name: Verify the archive in a clean temporary directory
+        run: python verify_judge_package.py --report artifacts/judge/ci-cleanroom-report.json
+
+  browser:
+    name: Required conversation and responsive watch checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      REQUIRE_BROWSER_TESTS: "1"
+      AZURE_OPENAI_ENDPOINT: ""
+      AZURE_OPENAI_DEPLOYMENT: ""
+      AZURE_OPENAI_API_KEY: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install pinned browser test runtime
+        run: npm install --no-save --package-lock=false --ignore-scripts playwright@1.62.1
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run conversation browser checks (all provider requests mocked)
+        run: node --test match-chat-ui.test.js watch-layout.test.js

@@ -1,0 +1,5 @@
+# Optional local AI experiment; the Node prototype does not need Python.
+agent-framework-ollama==1.0.0b261002
+agent-framework-core==1.20.0
+pydantic==2.13.5
+httpx==0.28.1

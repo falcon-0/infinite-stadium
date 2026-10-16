@@ -1,0 +1,260 @@
+{
+  "schema": "infinite-stadium.semantic-obligations-acceptance.v1",
+  "status": "Agent-authored architecture acceptance tests; not an executed or independently held-out model evaluation",
+  "humanValidation": false,
+  "modelCalls": 0,
+  "provenance": "Expected fixtures inspected from raw received matchState records. Questions here are test specifications, never production matching rules.",
+  "cases": [
+    {
+      "id": "explicit-margin",
+      "input": {
+        "kind": "sustained",
+        "seed": 8341,
+        "time": 110,
+        "question": "Which side has completed more passes so far, and by how many?"
+      },
+      "expected": {
+        "operator": "difference",
+        "metric": "completedPasses",
+        "home": 5,
+        "away": 4,
+        "leader": "home",
+        "absoluteMargin": 1
+      },
+      "reject": [
+        "Only5 and4 without explicit margin fulfillment.",
+        "Global count9 treated as one team count."
+      ],
+      "rawSnapshot": "sustained8341at110"
+    },
+    {
+      "id": "paraphrased-gap",
+      "input": {
+        "kind": "sustained",
+        "seed": 8341,
+        "time": 110,
+        "question": "How big is Northbridge’s completed-pass advantage over Harbour?"
+      },
+      "expected": {
+        "operator": "difference",
+        "absoluteMargin": 1
+      },
+      "reject": [
+        "Score margin instead of pass margin."
+      ],
+      "rawSnapshot": "sustained8341at110"
+    },
+    {
+      "id": "spanish-gap",
+      "input": {
+        "kind": "sustained",
+        "seed": 8341,
+        "time": 110,
+        "language": "es",
+        "question": "¿Qué equipo ha completado más pases y cuál es la diferencia?"
+      },
+      "expected": {
+        "operator": "difference",
+        "home": 5,
+        "away": 4,
+        "absoluteMargin": 1,
+        "language": "es"
+      },
+      "reject": [
+        "English-only question recognition."
+      ],
+      "rawSnapshot": "sustained8341at110"
+    },
+    {
+      "id": "counts-only",
+      "input": {
+        "kind": "sustained",
+        "seed": 8341,
+        "time": 110,
+        "question": "How many completed passes does each team have?"
+      },
+      "expected": {
+        "operator": "groupCounts",
+        "home": 5,
+        "away": 4,
+        "marginRequired": false
+      },
+      "reject": [
+        "Mandatory unasked margin treated as user obligation."
+      ],
+      "rawSnapshot": "sustained8341at110"
+    },
+    {
+      "id": "first-last-global",
+      "input": {
+        "kind": "interrupted",
+        "seed": 8341,
+        "time": 100,
+        "question": "Compare how the earliest attempt ended with the last one."
+      },
+      "expected": {
+        "operator": "orderedEndpoints",
+        "scope": "global-shots",
+        "first": {
+          "player": "A. Reed",
+          "time": 64,
+          "outcome": "saved"
+        },
+        "latest": {
+          "player": "D. Silva",
+          "time": 98,
+          "outcome": "blocked"
+        }
+      },
+      "reject": [
+        "First event silently filtered toSilva.",
+        "Known first outcome called unavailable.",
+        "Only latest endpoint rendered."
+      ],
+      "rawSnapshot": "interrupted8341at100"
+    },
+    {
+      "id": "first-last-player",
+      "input": {
+        "kind": "interrupted",
+        "seed": 8341,
+        "time": 100,
+        "question": "How did Reed’s first attempt end compared with his last?"
+      },
+      "expected": {
+        "operator": "orderedEndpoints",
+        "subject": "home-10",
+        "first": {
+          "time": 64,
+          "outcome": "saved"
+        },
+        "latest": {
+          "time": 84,
+          "outcome": "blocked"
+        }
+      },
+      "reject": [
+        "Global latestSilva98 substituted for Reed latest."
+      ],
+      "rawSnapshot": "interrupted8341at100"
+    },
+    {
+      "id": "pending-outcome",
+      "input": {
+        "kind": "counter",
+        "seed": 9193,
+        "time": 116,
+        "question": "Is Reed’s most recent shot a goal yet?"
+      },
+      "expected": {
+        "operator": "orderedEventAttribute",
+        "subject": "home-10",
+        "time": 116,
+        "revision": 1,
+        "outcome": "pending"
+      },
+      "reject": [
+        "Treat pending asmiss orconfirmedgoal."
+      ],
+      "rawSnapshot": "counter9193at116"
+    },
+    {
+      "id": "received-revision",
+      "input": {
+        "kind": "counter",
+        "seed": 9193,
+        "time": 118,
+        "question": "What happened to Reed’s most recent shot?"
+      },
+      "expected": {
+        "operator": "orderedEventAttribute",
+        "subject": "home-10",
+        "time": 116,
+        "revision": 2,
+        "outcome": "goal"
+      },
+      "reject": [
+        "Reuse stale revision1pending proof."
+      ],
+      "rawSnapshot": "counter9193at118"
+    },
+    {
+      "id": "absent-entity",
+      "input": {
+        "kind": "quiet",
+        "seed": 2969,
+        "time": 120,
+        "question": "How many goals did Messi score?"
+      },
+      "expected": {
+        "operator": "entityResolution",
+        "status": "absent",
+        "numericCountAllowed": false
+      },
+      "reject": [
+        "Return zero goals asifparticipant."
+      ],
+      "rawSnapshot": "quiet2969at120"
+    },
+    {
+      "id": "empty-timeline",
+      "input": {
+        "kind": "quiet",
+        "seed": 2969,
+        "time": 120,
+        "question": "What was the first shot’s outcome?"
+      },
+      "expected": {
+        "operator": "orderedEventAttribute",
+        "result": "empty-complete-scope"
+      },
+      "reject": [
+        "Invent shot or request clarification when complete scope genuinely empty."
+      ],
+      "rawSnapshot": "quiet2969at120"
+    },
+    {
+      "id": "general-definition",
+      "input": {
+        "kind": "quiet",
+        "seed": 2969,
+        "time": 120,
+        "question": "What does low block mean in football?"
+      },
+      "expected": {
+        "operator": "generalExplanation",
+        "matchQueriesRequired": false
+      },
+      "reject": [
+        "Force numeric AST or unrelated absence disclaimer."
+      ],
+      "rawSnapshot": "quiet2969at120"
+    },
+    {
+      "id": "proof-falsification",
+      "testType": "contract-mutation",
+      "expected": {
+        "reject": true
+      },
+      "mutations": [
+        "Change home count5 to9 in result proof.",
+        "Use recent instead offull window for sofar.",
+        "Cite only one event for total.",
+        "Use mismatched team query windows.",
+        "Omit required difference fulfillment while retaining correct operands.",
+        "Render a model-supplied result differing from server calculation.",
+        "Change output operationId toan unrequested one."
+      ]
+    },
+    {
+      "id": "complete-zero-group",
+      "testType": "executor-contract",
+      "expected": {
+        "rule": "A missing team group is zero only in complete compatible scope with known team membership and no limiting group filter; tie is a distinct computed relation."
+      },
+      "reject": [
+        "Treat missing group in truncated/topN query aszero."
+      ]
+    }
+  ]
+}
