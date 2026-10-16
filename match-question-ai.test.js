@@ -1608,12 +1608,14 @@ test('claim removal cannot leave a second unsupported causal claim without attem
 });
 
 
-test('internal premise assessment reaches the reviewer without appearing in the fan response',async()=>{
+test('independent review receives the actual question and evidence without the writer premise guess',async()=>{
  const premiseCheck={questionAssumption:'A shot was a goal',recordedAction:'The shot was off target',conclusion:'contradicted'};
  let received;
  const mock=directTransport({draft:{...draft,premiseCheck},queries:[]},undefined,(packet,call)=>{if(call)received=packet;});
  const result=await answerMatchQuestionAI(input,{config,fetcher:mock.fetcher});
- assert.deepEqual(received.premiseCheck,premiseCheck);
+ assert.equal(Object.hasOwn(received,'premiseCheck'),false);
+ assert.equal(received.evidence.question,input.question);
+ assert.ok(received.evidence.linkedContext.rows.some(row=>row.id===ref.id));
  assert.equal(Object.hasOwn(result,'premiseCheck'),false);
  assert.doesNotMatch(result.answer,/questionAssumption|contradicted/);
 });
@@ -2405,4 +2407,19 @@ test('personal player references keep unfamiliar action paraphrases in the match
  },packet=>({decision:'approve',requestCheck:{status:'useful-limitation',requestedInformation:question.question,coverage:packet.requestComponents.map(requestSpan=>({requestSpan,claimIndices:[0,1],answerForm:'explanation',requestedAction:'shot',temporalRelation:'none',relationAnchorClaimIndex:null,relationSourceLinkIndex:null,relationEntityBinding:'none'})),reason:'Latest shot and a necessary specific limitation.'}})],(packet,call,body)=>{if(!call){assert.equal(packet.selectedMoment,undefined);assert.equal(decisionBranch(body,'general'),undefined);}});
  const result=await answerMatchQuestionAI(question,{config,fetcher:mock.fetcher});assert.equal(result.execution.modelCalls,3);assert.match(result.answer,/cannot tell/);
  }
+});
+test('sequence-specific player involvement retains relevant passing evidence and an explicit assessment',async()=>{
+ const question={kind:'sustained',seed:17,time:79,question:'Who has been most involved in Northbridge’s buildup so far?'};
+ const mock=sequenceTransport([
+  {answerFocus:'player-assessment',explanationTarget:'observed-sequence',requestedForm:'assessment',mentionedPlayers:[],decision:{kind:'queries',queries:[{filters:{type:'pass',team:'home',result:true},aggregate:'by-player'}]}},
+  (packet,body)=>{
+   const modes=resolvedWireSchema(body).properties.composition.anyOf.map(mode=>mode.properties.mode.enum[0]);
+   assert.deepEqual(modes,['metric-player-pick']);
+   const fact=packet.matchFacts.facts.find(f=>f.selection.kind==='count'&&f.selection.metric==='completedPasses'&&f.selection.subjectId==='home-7');assert.ok(fact);
+   return {scope:'match',composition:{mode:'metric-player-pick',playerId:'home-7',factIds:[fact.id]},followUp:''};
+  },
+  packet=>({decision:'approve',requestCheck:{status:'answered',requestedInformation:question.question,responseIntent:{purpose:'assessment',needsAssessment:true,needsExplicitCorrection:false,needsMeasurementLimitation:false,reason:'The conclusion names a player on the explicitly limited passing measure.'},coverage:packet.requestComponents.map(requestSpan=>({requestSpan,claimIndices:[0,1],answerForm:'assessment',requestedAction:'pass',temporalRelation:'none',relationAnchorClaimIndex:null,relationSourceLinkIndex:null,relationEntityBinding:'none'})),reason:'Relevant passing evidence and qualified conclusion.'}})
+ ]);
+ const result=await answerMatchQuestionAI(question,{config,fetcher:mock.fetcher});
+ assert.match(result.answer,/J\. Cole.*2/);assert.match(result.answer,/On completed passing, my pick so far is J\. Cole/);assert.doesNotMatch(result.answer,/shots/);assert.equal(result.execution.modelCalls,3);
 });

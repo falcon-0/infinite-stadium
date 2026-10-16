@@ -864,3 +864,14 @@ test('a full-window scope for a different actor cannot license a recent assessme
  full.query.filters.player='carter';assert.deepEqual(unsupportedAssessmentWindows(fixture.answer,fixture.packet),[]);
  full.query.timeToExclusive=true;assert.equal(unsupportedAssessmentWindows(fixture.answer,fixture.packet).length,1);
 });
+test('positive grouped action evidence supports involvement without repeating its count',()=>{
+ const ref={type:'scope',id:'receptions',revision:1};
+ const source={scopeReference:ref,query:{filters:{type:'receive'},aggregate:'by-player',timeFrom:0,timeTo:79},groups:[{key:'reed',count:2}],scope:{missingFields:{}},truncated:false,rows:[]};
+ const packet={currentTime:79,roster:[{id:'reed',name:'A. Reed'},{id:'cole',name:'J. Cole'}],queryResults:[source]};
+ const draft={claims:[{text:'Reed is involved in receiving.',kind:'interpretation',evidence:[ref]}]};
+ const review={checks:[{claimIndex:0,actors:[{name:'Reed',action:'receive',individualAction:true}],counts:[]}]};
+ assert.equal(reviewActorsMatchEvidence(review,draft,packet),true);
+ for(const mutate of [s=>s.groups[0].count=0,s=>s.groups[0].key='cole',s=>s.truncated=true,s=>s.scope.missingFields.player=1,s=>s.query.aggregate='by-team',s=>s.query.filters.type='shot']){
+  const changed=structuredClone(source);mutate(changed);assert.equal(reviewActorsMatchEvidence(review,draft,{...packet,queryResults:[changed]}),false);
+ }
+});

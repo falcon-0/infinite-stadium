@@ -174,7 +174,21 @@ export function reviewActorIssues(review,answer,packet){
     const f=source.query?.filters||{};
     return actor.action==='goal'?f.type==='shot'&&f.result===true:actor.action==='assist'?source.query?.aggregate==='by-assister':actor.action===f.type;
    });
-   if(aggregateAction)continue;
+   // A complete cited grouped inventory proves positive action involvement even
+   // when the interpretation contains no repeated count for the reviewer to bind.
+   // It proves neither a quantity in prose nor the qualitative conclusion.
+   const groupedClaim=checks[check.claimIndex];
+   const groupedAction=player&&groupedClaim?.kind==='interpretation'&&!countClaimSpans(groupedClaim.text).length&&!/\b(?:not|never|no|hasn.t|didn.t|doesn.t|cannot|ne|pas|aucun|não|nunca|ningún)\b/iu.test(groupedClaim.text)&&groupedClaim.cited.some(item=>{
+    const source=item.reference.type==='scope'&&item.record,f=source?.query?.filters||{};
+    if(!source||source.truncated||Object.values(source.scope?.missingFields||{}).some(n=>n>0)||
+     !countWindowMatches(source,packet,checks[check.claimIndex]?.text||''))return false;
+    const group=source.groups?.find(group=>group.key===player.id);
+    if(!Number.isSafeInteger(group?.count)||group.count<=0)return false;
+    if(actor.action==='assist')return source.query.aggregate==='by-assister'&&f.type==='shot'&&f.result===true;
+    if(source.query.aggregate!=='by-player')return false;
+    return actor.action==='goal'?f.type==='shot'&&f.result===true:f.type===actor.action;
+   });
+   if(aggregateAction||groupedAction)continue;
    const rows=checks[check.claimIndex].cited.map(item=>item.record).filter(Boolean);
    const matches=rows.some(row=>{
     if(!player)return row.team===team&&(actor.action==='goal'?row.type==='shot'&&row.result===true:actor.action==='assist'?row.type==='shot'&&row.result===true&&!!row.assist:row.type===actor.action);
