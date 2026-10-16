@@ -25,11 +25,13 @@ import {createFanMomentCard,additionalFanClaims} from './fan-experience.js';
 import {initializeProductionDesk} from './production-desk-ui.js';
 import {initializeMatchChat} from './match-chat-ui.js';
 import {chooseWatchInsight,watchExplanation} from './watch-insights.js';
-const siteView=new URLSearchParams(location.search).get('view')||'watch';
+const requestedView=new URLSearchParams(location.search).get('view')||'watch';
+const siteView=requestedView==='studio'?'watch':requestedView;
+if(requestedView==='studio'){const url=new URL(location.href);url.searchParams.set('view','watch');history.replaceState(null,'',url);}
 const developerView=siteView==='developer',studioView=siteView==='studio';
 document.body.classList.add(developerView?'developer-view':studioView?'studio-view':'fan-view');
 const viewNavigation=document.createElement('nav');viewNavigation.className='view-navigation';viewNavigation.setAttribute('aria-label','Workspace');
-viewNavigation.innerHTML=`<a href="/?view=watch" ${!studioView&&!developerView?'aria-current="page"':''}>Watch</a><a href="/?view=studio" ${studioView?'aria-current="page"':''}>Studio</a>`;
+viewNavigation.innerHTML=`<a href="/?view=watch" ${!developerView?'aria-current="page"':''}>Matches</a>`;
 document.querySelector('header').append(viewNavigation);
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const usageCopy=execution=>execution?.usage?` · ${execution.usage.promptTokens} input / ${execution.usage.completionTokens} output tokens`:'';

@@ -1,80 +1,58 @@
 # Infinite Stadium submission preparation
 
-Current status: October 16, 2026. The Innovation Studio project profile exists at https://innovationstudio.microsoft.com/hackathons/insidethegamedeveloperhackathon/project/126399 and is linked to the challenge. Creating that profile did not complete the competition submission.
+Updated October 16, 2026. The product now focuses on fans watching a synthetic match and asking questions without stopping playback. Studio has been removed from site navigation; former Studio links open Watch. Older producer demonstrations are historical and must not represent the final product.
 
-A focused 71.04-second captioned Watch demo is prepared locally at `artifacts/demo/infinite-stadium-demo.mp4`, using genuine Azure answers, follow-up context and uninterrupted playback. It has not been published and does not demonstrate all Studio features. The latest v62 release passed all eight local gates (1,079 passed, one optional/platform skip). A six-question Azure development check now covers first scorer, explicit assist, provisional player pick, linked buildup, a genuine follow-up and recent shooting activity. The final reviewed answers took 10.3–22.0 seconds and two or three model calls. The pressure case needed a targeted reviewer-prompt fix; prior failed and verbose results remain in the audit. This is a tuned development sample across consecutive builds, not a broad reliability score.
+## Project pitch
 
-The combined local Watch/Studio demo is now `artifacts/demo/infinite-stadium-watch-studio-demo.mp4` (94.08 seconds, silent with captions). Studio correction and replacement approval checks passed without inference. The false-score correction, metric-qualified keeper comparison and provisional player assessment have returned useful Azure answers. The final-pass lookup now succeeds with an executed ordering proof. Two targeted shot-choice phrasings now return specific uncertainty on Azure; motives remain unrecorded. The same two questions now return one saved-shot fact and one specific unknown-reason statement in 15.8–16.4 seconds with three calls, versus 32.7–35.3 seconds and four calls before. This small tuned comparison is not a general response-time guarantee. Past withheld responses remain in the audit. Public access now works; trial continuity remains unresolved.
+Infinite Stadium helps football fans understand the match as they watch. Follow a synthetic match, ask a question in your own words, and receive an answer tied to the moment you were watching. The match keeps playing. Azure AI interprets the question, retrieves match evidence and reviews the answer; the application computes supported statistics and ordered events. Fans can change their language, level of detail and player focus.
 
-Four additional tuned fan questions now have developer-audited Azure answers: keeper involvement, individual passing accuracy, the latest left-foot attempt and correction of an assumed penalty miss. Final answers took21.5–32.9seconds across consecutive builds. Raw failures and network interruptions remain preserved; these samples do not establish broad accuracy or speed.
+## What is built
 
+- Twenty synthetic fixtures across five authored passage families, with fictional clubs and players.
+- A schematic 22-player replay at fixed 2× demo pace, synchronized score, compact statistics and short contextual insights.
+- Open Azure match conversation with pinned timestamps, bounded follow-up context and explicit event revisions.
+- Received-event queries, server-computed calculations and a separate model reviewer. Incorrect assumptions and unsupported explanations must not become match facts.
+- Personalization and English, Spanish, French and Portuguese match-answer support. Menus and curated general football-rule references still include English.
+- Automatic recorded recaps; AI recap generation is a separate provider request.
+- Vercel Hobby hosting, server-only Azure configuration and Free Upstash shared access sessions and model reservations. No paid account upgrade.
 
-Latest deployment validation (October 16): all eight local release gates passed, with 1,084 tests passed and one platform-specific skip. Production health/assets passed; private files returned 404; authenticated Azure answered "Who scored first?" with A. Reed at 01:56 and two calls. Shared reservations advanced from 10 to 12 without resetting the existing ledger. Logout revoked access. Production SSE delivered two terminal frames and completion; the browser clock and statistics advanced during playback. This is a bounded deployment check, not a broad AI accuracy certificate.
+Automatic context, animation and recorded recaps are deterministic. The application is a synthetic-event companion, not licensed Premier League video streaming or video recognition. The legacy producer source remains in the repository for historical reproducibility, but is outside the submitted fan workflow.
 
-A 116.07-second, 1080p motion graphics owner-review cut is prepared at `artifacts/demo/infinite-stadium-motion-demo-v1.mp4`. It retains genuine 94.08-second Watch/Studio footage and waits, plus a clearly separated synthetic goal diagram. It is silent and has not been uploaded to YouTube. The required public video URL must be on YouTube, Vimeo, Facebook Video or Youku; GitHub MP4 downloads are supplemental only.
+## Judging rubric and evidence
 
-## Ready-to-use project description
-
-**Infinite Stadium** is a synthetic football companion for viewers and coverage producers. Choose a match, follow the play and ask natural football questions without interrupting playback. The assistant pins each question to the displayed match moment and uses received contribution evidence. Supported comparisons and ordered endpoints become typed operations with server-computed proofs and application-rendered facts; known unrecorded-intention questions can select schema-grounded limitation facts, while other qualitative questions use bounded model-written prose. A model reviews request relevance, with additional evidence checks on prose. Counts, zero results and later corrections have explicit handling. Live testing still exposes interpretation and answer-quality gaps, so unrestricted football-question reliability is not claimed.
-
-The Watch experience combines a schematic 22-player replay, synchronized score and compact statistics, action-by-action commentary, short contextual explanations and an end-of-segment recap. Twenty fixtures vary clubs, lineups, timelines and routes across five authored passage families. A collapsed Viewing options drawer offers simple explanations, detailed analysis, language and a player to follow from the full current roster. These choices reach the AI while explicit questions retain priority. Conversational requests let viewers ask for further detail.
-
-Studio serves producers separately: audience-specific treatments, graphic previews, correction-aware approvals and timed rundown exports. When a provider amends an event, affected approvals require renewed review. It is a local production prototype, not a connected broadcast system.
-
-The integrated Azure inference path uses a Microsoft Foundry deployment of GPT-4.1 mini with custom Node orchestration. An optional local structured workflow uses Microsoft Agent Framework with Ollama. The website is deployed on Vercel Hobby at https://infinite-stadium-lime.vercel.app using the current Azure model and a Free Upstash shared session/usage store. Azure website hosting remains an optional alternative.
-
-## Official delivery requirements
-
-Rechecked October 14 against the [official rules](https://github.com/microsoft/insidethegamehackathon/blob/main/OFFICIAL%20RULES.md). Submit by October 27, 2026, 23:59 Pacific. The entry needs a public GitHub repository, a public functioning demonstration video under two minutes, a project description and working access for judges. Read the organizer's full rules for eligibility, permissions and access obligations. Announcement is due by November 20; judging ends November 10. These dates do not extend an Azure trial.
-
-## Challenge coverage and remaining evidence
-
-| Area | Implemented | Still needed |
+| Criterion | Weight | Evidence and practical limit |
 | --- | --- | --- |
-| Ingest and interpret | Synthetic events, sampled positions, revisions, withdrawals, known-outcome statistics | Independent football plausibility review; full-match simulation is not claimed |
-| Explain and render | Action headline, short deterministic context, freeform Azure conversation, schematic replay and Studio cues | Stronger sustained realism and broad live-model quality evaluation |
-| Personalize | Persisted viewing choices, full-roster player following, profile-aware open conversation, separate Studio treatments | Demonstrate genuinely different useful responses; native-language review |
-| Agentic workflow | Answer-or-query analyst and reviewer; optional bounded retrieval and shared evidence | Controlled comparison against a simpler workflow; role count alone is insufficient |
-| Applicability | Uninterrupted viewing and correction-aware producer review | Real fan feedback, public access, operational verification |
+| Technological implementation | 20% | Reproducible source build, CI on Windows/Linux, browser checks, persistent shared usage guard; long-term model availability still needs securing |
+| Agentic design and innovation | 20% | Question analyst, read-only tools and independent reviewer with bounded repair; role count alone does not prove superiority over one agent |
+| Real-world impact | 20% | Ask during uninterrupted viewing and revisit a pinned moment; real fan validation is still pending |
+| User experience and presentation | 20% | Focused Watch experience, compact stats and optional preferences; final Watch-only recording and owner review pending |
+| Category adherence | 20% | Synthetic events → interpreted facts → explanations → on-screen experience → personalization; category selection still needs owner review |
 
-## Current verification and handover
+Latest Watch-only release: all eight local gates passed, 1,085 tests passed and one platform-specific skip. The old Studio-link redirect, responsive Watch layout, multilingual ordinal wording and isolated source-package checks passed. This does not certify broad AI answer quality.
 
-The final v30 local release passed all eight gates: **1,027 tests passed, one optional/platform check skipped (1,028 total)**. This includes real Chrome phone/desktop checks, 2× pacing, continued playback during preference changes, dataset consistency, source packaging and an isolated launch. It does not certify model quality, public hosting or a working Docker daemon.
+Production checks confirmed health/assets, private-file blocking, login/logout, persistent reservations and terminal SSE. A real scorer question returned A. Reed at 01:56 using two model calls. A later bounded hosted check returned a Spanish scorer, Spanish follow-up assist and a cross-fixture Reed/Mensah correction; it also exposed awkward Spanish ordinal wording, now repaired locally. A malformed one-letter question returned a validation response. Saved reports retain failures and latency; these are developer checks, not independent fan testing or broad accuracy evidence.
 
-Watch now uses a labelled fixed 2× pace: a two-minute passage takes about one minute. Automatic context lasts roughly eight wall-clock seconds. The full 22-player picker, persisted viewing preferences, compact mobile spotlight and actual club labels are verified. Studio retains its separate playback controls.
+The current trial is working. Hosting on Vercel does not extend Azure credits or trial duration. The authorized friend's trial has not been activated, and no account switch is being performed now. Cash remains $0. Continuity through judging is not secured yet.
 
-Historical v29 baseline (superseded by later repairs): AI usefulness was the main blocker. The v29 first-exposure run delivered one useful but repetitive answer from six attempts; five answerable questions were withheld. One additional keeper regression was withheld. The owner requested wrapping up, so the remaining five planned regression cases were not executed. Seven saved results used 31 model calls. The v30 minimal contract fix restores a grounded break assessment in an exact offline replay, but other numeric-scope, correction-binding and hidden-relative-anchor failures remain. No fresh cloud validation was claimed after that fix. Historical results and failures are retained in EVALUATION_EVIDENCE.json and DEVELOPMENT_HISTORY.md.
+## Submission links and fields
 
-No independent human participants have tried the build. Fan testing remains near submission as requested. The GitHub source and downloadable demo assets are the public delivery route; working hosted AI access through November10 remains pending. The friend's authorized trial is not active; continuity is not secured. Cash spending stays $0 with no pay-as-you-go upgrade.
-
-The current v62 source passed release checks and identical-input Azure latency checks: passing accuracy13.563seconds/2calls versus32.523seconds/3calls, latest left-foot action10.431seconds/2calls versus21.526seconds/5calls. Independent review remains mandatory. These two tuned samples do not certify arbitrary-question speed or correctness. The captioned Watch/Studio video remains a genuine earlier capture, not a recording of these latency changes.
-
-## October 14 internal regrade
-
-Three Astra reviewers reassessed source and saved evaluations after remediation: Technology 16/20, Agentic 14/20, Impact 11/20, UX 14/20, Category 12/20; total 67/100. This is an internal mock assessment, not an organizer score or winning prediction. Experience review was source/report based, not independent current visual or participant validation.
-
-The final targeted probability regression released a supported shot outcome and an explicit unavailable-probability statement after the deterministic guard triggered a rewrite. The preceding recovery regression correctly distinguished recovery from unknown forcing responsibility. These tuned regressions do not establish general answer quality or reviewer-specific superiority. The audit preserves earlier causal failures, over-refusals, incomplete assist citations and provider rate limiting. Fresh multi-turn and cross-fixture evaluation, real fan feedback and operational continuity remain outstanding.
-
-## Release fields
-
-| Field | State |
+| Field | Current state |
 | --- | --- |
-| Innovation Studio profile and challenge link | Created |
-| Public GitHub source URL | https://github.com/falcon-0/infinite-stadium |
-| Judge website or test-build URL | https://infinite-stadium-lime.vercel.app (AI requires private project access code) |
-| Required public video URL | Pending YouTube upload; GitHub MP4 download is supplemental only |
-| Final category | Provisional Best Multi-Agent System; justify using measured benefit |
-| Final release commit | Pending freeze after final checks |
-| Live model availability through judging | Not secured by the expiring trial |
-| Independent participant feedback | Zero participants; reserved for final stage |
+| Innovation Studio project | https://innovationstudio.microsoft.com/hackathons/insidethegamedeveloperhackathon/project/126399 — profile exists; final entry not submitted |
+| Public source | https://github.com/falcon-0/infinite-stadium |
+| Website | https://infinite-stadium-lime.vercel.app — AI sign-in instructions belong in the private organizer field |
+| Public demonstration video | YouTube selected; upload pending |
+| Category | Provisional Best Multi-Agent System; demonstrate useful collaboration without unsupported comparative claims |
+| Final source commit | Freeze after the current checks and owner review |
 
-## Final release sequence
+The final demo needs a Watch-only recording. Existing mixed Watch/Studio cuts are superseded. Astra is preparing a separate motion preview; captions and original sound effects remain the chosen format, with no voice-over required. Do not fabricate AI responses or shorten genuine response waits. Clearly distinguish an editorial diagram from functioning app footage.
 
-1. Run `npm run verify:release`; inspect the reports and fix any failure.
-2. Finish browser/football realism review and live-model question, follow-up and multilingual checks within the approved allowance.
-3. Run the prepared final-stage fan sessions. Record actual observations and changes, without presenting internal checks as participants.
-4. Verify a deployment with HTTPS, server-only credentials, persistent budget storage and a funded or zero-cost continuity plan. See DEPLOYMENT.md.
-5. Publish the reviewed source and release archive, record the actual application using DEMO_SCRIPT.md, and verify links from a signed-out browser.
-6. Complete the project fields, review eligibility and agreements, and submit before the deadline.
+## Remaining submission decisions
 
-Historical notes are in SUBMISSION_HISTORY.md and DEVELOPMENT_HISTORY.md. They do not supersede this current status.
+1. Complete the Watch-only release and production checks.
+2. Review the final Watch-only video, then upload to YouTube and verify signed-out access.
+3. Run the prepared final-stage fan tasks with actual participants and record their feedback honestly.
+4. Verify model access through judging and test any later authorized account change.
+5. Confirm eligibility, category, final fields and private judge access instructions with the owner; submit only after owner review.
+
+Official rules rechecked October 16: https://github.com/microsoft/insidethegamehackathon/blob/main/OFFICIAL%20RULES.md. Submission ends October 27 at 11:59 PM Pacific; judging ends November 10 at 11:59 PM Pacific. The video must be under two minutes, show the functioning project, and have a public URL on YouTube, Vimeo, Facebook Video or Youku. GitHub MP4 downloads are supplemental. A public GitHub repository and working judge access are required. Announcements are due by November 20. No final submission has been made.

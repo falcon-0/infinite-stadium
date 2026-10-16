@@ -67,6 +67,10 @@ export function createServer({env=process.env,fetcher=fetch,localRunner,localSta
   try{requestURL=new URL(req.url,'http://localhost');}
   catch{json(res,400,{error:'Invalid request URL.'});return;}
   const path=requestURL.pathname;
+  if(path==='/'&&req.method==='GET'&&requestURL.searchParams.get('view')==='studio'){
+   requestURL.searchParams.set('view','watch');
+   res.writeHead(302,{Location:`/${requestURL.search}`,'Cache-Control':'no-store'});res.end();return;
+  }
   if(path==='/api/health'&&req.method==='GET'){json(res,200,{healthy:true,synthetic:true});return;}
   if(['/api/production/package','/api/match/question'].includes(path)&&req.method==='POST'){
    if(req.headers.origin&&!settings.origins.includes(req.headers.origin)){json(res,403,{error:'Origin is not allowed.'});return;}

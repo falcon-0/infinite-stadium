@@ -1,8 +1,8 @@
 # Infinite Stadium
 
-A synthetic football match companion for fans and producers. Follow a chance, understand why it matters, replay its buildup, and trace the story to current received evidence.
+A synthetic football match companion for fans. Follow a chance, understand why it matters, replay its buildup, and trace the story to current received evidence.
 
-This is a working development prototype for the Inside the Game hackathon. The application currently runs locally, with optional Azure or local AI inference. Public delivery and submission remain pending.
+This is a working development prototype for the Inside the Game hackathon. The website is hosted at https://infinite-stadium-lime.vercel.app with Azure match conversation. Studio has been removed from the site; the submitted experience focuses on Watch. Final video upload, trial continuity and submission remain pending.
 
 ## Current viewing workflow - October 14
 
@@ -12,9 +12,9 @@ The AI interprets the question and plans read-only queries or a typed calculatio
 
 English, Spanish, French and Portuguese selections reach the match-answer workflow. Curated football-rule references currently render in English and declare their actual language. Source-bound cloud tests retain failed, partial and successful answers; they do not establish broad reliability or native-language validation. See the [submission evidence](docs/SUBMISSION.md) and [development history](docs/DEVELOPMENT_HISTORY.md).
 
-Instant play-by-play, short automatic context and recorded recaps are deterministic. Studio separately offers audience treatments, graphic preview, human approval, correction handling and rundown exports. It does not publish a broadcast. Open chat needs Azure; the optional local model currently serves structured Studio workflows, not an equivalent open chat experience.
+Instant play-by-play, short automatic context and recorded recaps are deterministic. Open chat needs Azure. Legacy producer and local-inference source is retained for reproducibility; it is outside the submitted fan workflow.
 
-The public source and downloadable demonstration are at [GitHub](https://github.com/falcon-0/infinite-stadium) and its [demo release](https://github.com/falcon-0/infinite-stadium/releases/tag/v0.1.0-demo). The 94-second recording shows an earlier genuine Watch/Studio prototype; it is not a hosted application or a capture of the latest latency fixes.
+The public source and downloadable demonstration are at [GitHub](https://github.com/falcon-0/infinite-stadium) and its [demo release](https://github.com/falcon-0/infinite-stadium/releases/tag/v0.1.0-demo). The release video shows a superseded Watch/Studio prototype. A Watch-only final recording is being prepared; do not use the historical clip as the final product demonstration.
 
 ## Run and explore
 
@@ -31,7 +31,6 @@ Open `http://127.0.0.1:4173/`. [Judge setup](docs/JUDGE_SETUP.md) is the authori
 3. **Follow:** the banner follows received actions at the displayed replay time. Shirt markers and the ball show the schematic passage.
 4. **Ask:** with available Azure, type a football question in **Ask about the match**. Playback continues; the question captures its match time. The language selector also supplies the requested AI response language.
 5. **Recap:** finish the passage and choose **View recap**. The recorded recap is automatic; AI recap generation is a separate provider request.
-6. **Studio:** the separate producer workspace retains audience-oriented treatments, selected buildup exploration, review and rundown exports. Nothing is broadcast.
 
 Useful timestamps in the default passage: the shot at **01:36** is corrected from off target to saved when received time reaches **01:38**. The goal at **01:56** remains pending until confirmation at **01:58**, then changes the score to 1–0. Longer fixtures and engineering tools are separate in Developer workspace.
 
@@ -43,7 +42,7 @@ Useful timestamps in the default passage: the shot at **01:36** is corrected fro
 | Received state | Replay clock, revision history, SSE updates and current inventory | `match-stream.js`, `stream-state.js` |
 | Interpretation | Supported statistics, moment significance, bounded patterns and recap facts | `engine.js`, `moment-meaning.js`, `story-facts.js`, `recap-facts.js` |
 | AI workflow | Natural question interpretation, typed operation proofs, bounded prose and editorial review | `match-question-ai.js`, `match-operation-proof.js`, `fact-workflow.js`, `recap-workflow.js` |
-| Presentation | Watch/Studio views, persistent moment card and received-only animation | `stream-ui.js`, `fan-experience.js`, `pitch-motion.js`, `moment-replay.js` |
+| Presentation | Watch view, persistent moment card and received-only animation | `stream-ui.js`, `fan-experience.js`, `pitch-motion.js`, `moment-replay.js` |
 | Producer controls | Exact-evidence review, approvals, correction inbox and rundown export | `producer-review.js`, `producer-validation.js`, `producer-review-ui.js` |
 
 Instant cards, animation and recorded recaps are deterministic. Open chat can generate reviewed prose from bounded queries. For supported numerical comparisons and ordered endpoints, AI instead selects a typed operation; the application computes and words its verified result, and a model reviews whether it answers the question. Provenance distinguishes application-rendered facts from model-written prose. Structured Studio workflows also select facts and render application templates. A model reviewer does not approve the producer's rundown. Intent interpretation and prose review remain fallible.

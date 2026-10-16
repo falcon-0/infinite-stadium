@@ -300,8 +300,14 @@ export function buildQuestionFacts(packet){
   if(f.player&&!player(subject)||f.team&&!Object.hasOwn(teams,f.team))continue;
   if(listed.some(item=>!matchesMetric(item.row,m)||subject&&(Object.hasOwn(teams,subject)?item.row.team!==subject:item.row.playerId!==subject)||Object.hasOwn(f,'result')&&item.row.result!==f.result||f.bodyPart&&item.row.bodyPart!==f.bodyPart||item.row.time<q.timeFrom||item.row.time>q.timeTo||q.timeFromExclusive&&item.row.time===q.timeFrom||q.timeToExclusive&&item.row.time===q.timeTo))continue;
   const bodyLabel=f.bodyPart?({en:{'left-foot':'left foot','right-foot':'right foot',head:'head'},es:{'left-foot':'pie izquierdo','right-foot':'pie derecho',head:'cabeza'},fr:{'left-foot':'pied gauche','right-foot':'pied droit',head:'tête'},pt:{'left-foot':'pé esquerdo','right-foot':'pé direito',head:'cabeça'}})[language][f.bodyPart]:null;
-  const qualifier=`${units[language][m][language==='en'?0:1]}${bodyLabel?` (${bodyLabel})`:''}${subject?` ${c.for} ${label(subject)}`:''}${q.timeFromExclusive||q.timeToExclusive?` (${windowText(q).trim().replace(/:$/,'')})`:q.timeFrom!==0||q.timeTo!==now?` (${clock(q.timeFrom)}–${clock(q.timeTo)})`:''}`;
-  let prefix=`${order==='asc'?c.first:c.last} ${qualifier}`;
+  const qualifier=`${units[language][m][0]}${bodyLabel?` (${bodyLabel})`:''}${subject?` ${c.for} ${label(subject)}`:''}${q.timeFromExclusive||q.timeToExclusive?` (${windowText(q).trim().replace(/:$/,'')})`:q.timeFrom!==0||q.timeTo!==now?` (${clock(q.timeFrom)}–${clock(q.timeTo)})`:''}`;
+  const feminine=({es:['receptions','creditedAssists'],fr:['passes','completedPasses','failedPasses','pendingPasses','receptions','creditedAssists'],pt:['passes','receptions','creditedAssists','ballWins']})[language]?.includes(m);
+  const ordinal=language==='en'?(order==='asc'?c.first:c.last):({
+   es:order==='asc'?(feminine?'Primera':'Primer'):(feminine?'Última':'Último'),
+   fr:order==='asc'?(feminine?'Première':'Premier'):(feminine?'Dernière':'Dernier'),
+   pt:order==='asc'?(feminine?'Primeira':'Primeiro'):(feminine?'Última':'Último')
+  })[language];
+  let prefix=`${ordinal} ${qualifier}`;
   const relation=(packet.queryRelations||[]).find(link=>link.anchorIdentifiedBy==='requested-moment'&&link.relation==='before'&&link.sameTeam&&key(link.scopeReference)===key(source.scopeReference)&&key(link.anchor)===key(packet.requestedMoment?.reference)&&link.anchorTime===packet.requestedMoment?.time);
   const anchor=relation&&queries.flatMap(query=>query.rows||[]).find(row=>key({type:'event',id:row.id,revision:row.revision})===key(relation.anchor));
   if(anchor?.type==='shot'&&anchor.passId===endpoint.row.id&&anchor.team===f.team&&q.timeTo===anchor.time&&q.timeToExclusive&&order==='desc'&&m==='passes'&&Object.keys(f).every(field=>['type','team'].includes(field))){

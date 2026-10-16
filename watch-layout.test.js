@@ -16,6 +16,11 @@ test('watch keeps the pitch beside its action on desktop and above the composer 
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/api/**',route=>route.request().method()==='POST'?route.abort():route.continue());
   const url=`http://127.0.0.1:${server.address().port}/?view=watch&match=northbridge-harbour`;
+  await page.goto(url.replace('view=watch','view=studio'));
+  await page.locator('.watch-stage').waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('view'),'watch','old Studio links retain the selected match and open Watch');
+  assert.equal(await page.getByRole('link',{name:'Studio',exact:true}).count(),0);
+  assert.equal(await page.locator('.production-desk').count(),0);
   const capture=async name=>{
    if(!process.env.WATCH_LAYOUT_SCREENSHOT_DIR)return;
    await mkdir(process.env.WATCH_LAYOUT_SCREENSHOT_DIR,{recursive:true});

@@ -335,3 +335,14 @@ test('a requested ordered endpoint survives a large background catalog without c
  const requested=query('last-pass',{type:'pass'},[],{aggregate:'list',count:1,rows:[row()]});requested.query.order='desc';requested.query.limit=1;p.requestedEvidence=[requested];
  const manifest=buildQuestionFacts(p);assert.equal(manifest.truncated,true);assert.equal(manifest.facts.length,128);assert.equal(manifest.facts[0].proof.kind,'ordered-event');assert.equal(manifest.facts[0].proof.scope.id,'last-pass');assert.equal(manifest.facts[0].proof.event.eventId,'pass');
 });
+
+
+test('ordered goal wording uses singular, grammatically matched labels in every supported language',()=>{
+ for(const [language,first,last] of [['en','First confirmed goal','Latest confirmed goal'],['es','Primer gol confirmado','Último gol confirmado'],['fr','Premier but confirmé','Dernier but confirmé'],['pt','Primeiro gol confirmado','Último gol confirmado']]){
+  for(const [order,prefix] of [['asc',first],['desc',last]]){
+   const p={...packet(),responseLanguage:language},goal=row({id:'goal',type:'shot',team:'home',playerId:'reed',player:'A. Reed',time:100,result:true,outcome:'goal'});
+   const q=query('goal-endpoint',{type:'shot',result:true,outcome:'goal'},[],{aggregate:'list',count:1,rows:[goal]});Object.assign(q.query,{order,limit:1});p.requestedEvidence=[q];
+   const fact=buildQuestionFacts(p).facts.find(f=>f.proof.kind==='ordered-event');assert.ok(fact);assert.ok(fact.claim.text.startsWith(prefix+':'),fact.claim.text);assert.equal(fact.proof.event.eventId,'goal');assert.equal(fact.claim.evidence.length,2);
+  }
+ }
+});
