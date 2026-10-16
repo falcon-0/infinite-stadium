@@ -58,3 +58,15 @@ test('broken links, corrected goals and invalid actor relationships cannot produ
  const changes=[rows=>rows.find(r=>r.time===112&&r.type==='pass').cause='missing',rows=>rows.find(r=>r.time===108&&r.type==='pass').receiverId='away-8',rows=>rows.find(r=>r.time===110&&r.type==='receive').playerId='home-7',rows=>{const goal=rows.find(r=>r.time===116&&r.type==='shot');goal.result=false;goal.outcome='saved';},rows=>rows.find(r=>r.time===104&&r.type==='recovery').recoveryKind='segment-start',rows=>rows.find(r=>r.time===108&&r.type==='pass').cause=rows.find(r=>r.time===112&&r.type==='pass').id];
  for(const change of changes){const {packet}=fixture();change(packet.linkedContext.rows);assert.equal(buildQuestionFacts(packet).facts.some(f=>f.proof.kind==='linked-goal-sequence'),false);}
 });
+
+test('one complete count skips redundant wording but incomplete and evaluative requests do not',()=>{
+ const {packet}=fixture();packet.requestComponents=['How many passes has Northbridge attempted?'];
+ packet.requestedEvidence=[{scopeReference:{type:'scope',id:'team-passes',revision:1},query:{filters:{type:'pass',team:'home'},aggregate:'count',timeFrom:0,timeTo:118},count:4,rows:[],truncated:false,scope:{missingFields:{}},entityResolution:{}}];
+ const options={form:'fact',focus:'other'},manifest=buildQuestionFacts(packet);
+ assert.ok(directQuestionFacts(packet,manifest,options));
+ assert.ok(directQuestionFacts(packet,manifest,{...options,focus:'team-assessment'}));
+ assert.ok(directQuestionFacts(packet,manifest,{...options,focus:'player-performance'}));
+ for(const mutate of [p=>p.requestedEvidence[0].scope.missingFields.player=1,p=>p.requestedEvidence[0].truncated=true,p=>p.requestedEvidence[0].entityResolution.player={status:'absent'},p=>p.requestComponents.push('Were they effective?'),p=>p.requestedEvidence.push(structuredClone(p.requestedEvidence[0]))]){const bad=structuredClone(packet);mutate(bad);assert.equal(directQuestionFacts(bad,buildQuestionFacts(bad),options),null);}
+ assert.equal(directQuestionFacts(packet,manifest,{...options,form:'assessment'}),null);
+ assert.equal(directQuestionFacts(packet,manifest,{...options,focus:'player-assessment'}),null);
+});

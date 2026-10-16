@@ -19,7 +19,7 @@ function withoutReferences(value){
  * The fingerprint identifies the full source, independently of answer selection. */
 export function projectReviewEvidence(packet,answer){
  const projected={sourceFingerprint:createHash('sha256').update(JSON.stringify(canonical(packet))).digest('hex')};
- for(const name of ['question','answerFocus','previousQuestion','conversation','responseLanguage','language','roster','teams','score','coordinateSystem','mentionedPlayerResolution','requestedMoment','pendingOutcomeContext','timeUnit','observedAt','observedClock','currentTime','limits','evidenceCapabilities']){
+ for(const name of ['question','requestedForm','explanationTarget','answerFocus','previousQuestion','conversation','responseLanguage','language','roster','teams','score','coordinateSystem','mentionedPlayerResolution','requestedMoment','pendingOutcomeContext','timeUnit','observedAt','observedClock','currentTime','limits','evidenceCapabilities']){
   if(packet[name]!==undefined)projected[name]=copy(packet[name]);
  }
  if(packet.evidenceCapabilities)projected.evidenceCapabilities=withoutReferences(packet.evidenceCapabilities);

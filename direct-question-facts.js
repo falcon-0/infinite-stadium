@@ -35,6 +35,12 @@ export function directQuestionFacts(packet,manifest,{focus,form,passAccuracyRequ
  }
  if(queries.length!==1)return null;
  const source=queries[0],q=source.query,row=source.rows?.[0];
+ // A single complete count already has application-rendered wording. The
+ // independent reviewer still checks that its predicates answer the question.
+ if(components===1&&form==='fact'&&focus!=='player-assessment'&&q?.aggregate==='count'&&source.truncated===false&&source.scope?.missingFields&&Object.values(source.scope.missingFields).every(value=>value===0)&&Object.values(source.entityResolution||{}).every(entity=>entity.status==='resolved')){
+  const matches=manifest.facts.filter(fact=>fact.proof.kind==='count'&&key(fact.proof.scope)===key(source.scopeReference));
+  if(matches.length===1)return result(matches[0]);
+ }
  if(components===2&&!['left-foot','right-foot','head'].includes(q?.filters?.bodyPart))return null;
  if(q?.aggregate!=='list'||source.rows?.length!==1||!(q.filters?.id===row.id||q.limit===1))return null;
  const current=fact=>(fact.proof.eventId===row.id&&fact.proof.revision===row.revision);

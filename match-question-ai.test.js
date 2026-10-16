@@ -224,6 +224,20 @@ const resolvedWireSchema=body=>{
 };
 const decisionBranch=(body,kind)=>resolvedWireSchema(body).properties.decision.anyOf.find(branch=>branch.properties.kind.enum.includes(kind));
 const operationProperties=(body,operator)=>decisionBranch(body,'operation')?.properties.plan.properties.obligations.items.anyOf.find(branch=>branch.properties.operator.enum.includes(operator))?.properties;
+test('a model-mistyped club receives a complete team count in two calls with independent review',async()=>{
+ let reviewed=false;
+ const mock=sequenceTransport([
+  {answerFocus:'other',explanationTarget:'none',requestedForm:'fact',mentionedPlayers:['Northbridge'],decision:{kind:'queries',queries:[{filters:{type:'pass',player:'Northbridge'},aggregate:'count'}]}},
+  packet=>{
+   assert.deepEqual(packet.evidence.mentionedPlayerResolution,[]);
+   assert.ok([...(packet.evidence.requestedEvidence||[]),...(packet.evidence.queryResults||[])].some(result=>result.query?.filters?.team==='home'&&result.query.aggregate==='count'&&!result.query.filters.player));reviewed=true;
+   return {decision:'approve',reason:'The exact source club has a complete team-scoped pass count.'};
+  }
+ ]);
+ const result=await answerMatchQuestionAI({kind:'sustained',seed:17,time:38,question:'How many passes has Northbridge attempted?'},{config,fetcher:mock.fetcher});
+ assert.ok(reviewed);assert.equal(result.answer,'Northbridge has 1 pass attempt.');assert.doesNotMatch(result.answer,/lineup|not in this/);assert.notEqual(result.provenance.source,'verified-lineup-resolution');assert.equal(result.execution.modelCalls,2);assert.equal(result.claimProvenance[0].modelGenerated,false);
+});
+
 function sequenceTransport(values,inspect=()=>{}){
  let calls=0;
  return {count:()=>calls,fetcher:async(_url,options)=>{
@@ -233,6 +247,19 @@ function sequenceTransport(values,inspect=()=>{}){
   return {ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify(reviewFixture(value,body))}}],usage:{prompt_tokens:100,completion_tokens:20}})};
  }};
 }
+
+test('a success filter on receptions is corrected before it can invent a zero-reception answer',async()=>{
+ const query=result=>({filters:{type:'receive',team:'home',...(result===null?{}:{result})},aggregate:'by-player'});
+ let repaired=false;
+ const mock=sequenceTransport([
+  {answerFocus:'event-actor',requestedForm:'fact',mentionedPlayers:[],decision:{kind:'queries',queries:[query(true)]}},
+  packet=>{assert.equal(packet.planningCorrection.kind,'invalid-control-outcome');repaired=true;return {answerFocus:'event-actor',requestedForm:'fact',mentionedPlayers:[],decision:{kind:'queries',queries:[query(null)]}};},
+  packet=>{const fact=packet.matchFacts.facts.find(f=>f.selection.kind==='count'&&f.selection.metric==='receptions'&&f.selection.subjectId==='home-10');assert.ok(fact);assert.match(fact.claim.text,/2/);return {scope:'match',composition:{mode:'facts',factIds:[fact.id]},followUp:''};},
+  {decision:'approve',reason:'The complete home reception inventory identifies Reed with two receptions.'}
+ ]);
+ const answer=await answerMatchQuestionAI({kind:'sustained',seed:17,time:79,question:'Who has received Northbridge’s passes most often?'},{config,fetcher:mock.fetcher,canRepair:()=>true});
+ assert.ok(repaired);assert.match(answer.answer,/A\. Reed.*2/);assert.equal(answer.execution.planningRepairs,1);assert.equal(answer.execution.modelCalls,4);
+});
 
 test('the actual first wire chooses one plan and never asks for authored prose',async()=>{
  const question={kind:'interrupted',seed:8341,time:100,question:'Compare the first and latest shots.'};
@@ -2205,17 +2232,18 @@ test('planner wire licenses pass outcome filters without restricting supporting 
  for(const [question,allowed] of [['Who did my favourite last pass to?',[]],['Was the latest pass completed?',[]],['Who made the latest completed pass?',[true]],['Who made the latest unsuccessful pass?',[false]],['Who made the latest pass, not just completed ones?',[]],['¿Quién hizo el último pase?',[]],['Qui a fait la dernière passe ?',[]],['Quem fez o último passe?',[]]]){
   const mock=sequenceTransport([{mentionedPlayers:[],decision:{kind:'queries',queries:[]}}, {scope:'match',claims:[{kind:'limitation',text:'Please identify the player.',evidence:[]}],followUp:''},{decision:'approve'}],(_packet,call,body)=>{
    if(call)return;
-   const raw=body.response_format.json_schema.schema,rawQueries=raw.properties.decision.anyOf.find(branch=>branch.properties.kind.enum.includes('queries')).properties.queries.items.anyOf;
-   const definitions=Object.keys(raw.$defs||{});assert.equal(definitions.length,2,'Share ordinary and entity-bound filter definitions across all query modes');
-   const references=new Set(rawQueries.map(variant=>variant.properties.filters.$ref));assert.equal(references.size,2);assert.ok(definitions.every(name=>references.has(`#/$defs/${name}`)),'Every emitted definition is used');
-   for(const definition of Object.values(raw.$defs))for(const branch of definition.anyOf.filter(branch=>branch.properties)){assert.equal(branch.additionalProperties,false);assert.deepEqual(new Set(branch.required),new Set(Object.keys(branch.properties)));}
+   const raw=body.response_format.json_schema.schema;
+   const definitions=Object.keys(raw.$defs||{});assert.ok(definitions.length>=2,'Share ordinary and entity-bound filters, plus repeated schema subtrees');
+   const wire=JSON.stringify(raw);assert.ok(definitions.every(name=>wire.includes('"$ref":"#/$defs/'+name+'"')),'Every emitted definition is used');
    assert.ok(JSON.stringify(raw).length<25000,'Permission constraints must not duplicate the filter schema for every query mode');
    const variants=decisionBranch(body,'queries').properties.queries.items.anyOf;
    for(const variant of variants){
     const filters=variant.properties.filters.anyOf,pass=filters.find(branch=>branch.properties?.type.enum?.includes('pass')),other=filters.find(branch=>branch.properties?.type.enum?.includes('shot')),untyped=filters.find(branch=>branch.properties?.type.type==='null');
+    for(const branch of filters.filter(branch=>branch.properties)){assert.equal(branch.additionalProperties,false);assert.deepEqual(new Set(branch.required),new Set(Object.keys(branch.properties)));}
     assert.ok(pass&&other&&untyped);assert.deepEqual(pass.properties.result,allowed.length?{anyOf:[{type:'boolean',enum:allowed},{type:'null'}]}:{type:'null'});
     assert.deepEqual(pass.properties.outcome,{type:'null'});assert.deepEqual(untyped.properties.result,{type:'null'});assert.deepEqual(untyped.properties.outcome,{type:'null'});
     assert.notDeepEqual(other.properties.result,{type:'null'});assert.equal(other.properties.type.enum.includes('pass'),false);
+    const control=filters.find(branch=>branch.properties?.type.enum?.includes('receive'));assert.ok(control);assert.deepEqual(control.properties.result,{type:'null'});assert.deepEqual(control.properties.outcome,{type:'null'});
    }
   });
   await answerMatchQuestionAI({...input,question},{config,fetcher:mock.fetcher});

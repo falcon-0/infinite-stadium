@@ -18,6 +18,10 @@ import {recoveryClassification} from './recovery-classification.js';
 import {pruneUncoveredCanonicalFacts} from './question-coverage-pruning.js';
 import {sourceSequenceLinks,sourceSequenceWitness} from './source-sequence-proof.js';
 import {omitLeadingCountProse} from './question-prose-normalization.js';
+import {sourceClubSide,normalizeClubActorQuery} from './club-query-identity.js';
+import {compactRepeatedSchema} from './schema-compaction.js';
+
+const teamStylePolicy=`Distinguish a team's approach from an attacking leaderboard. A request to explain how one team is playing, building attacks or attempting to progress is an explanation, not merely a comparison of shot totals. Use answerFocus team-assessment, requestedForm explanation and explanationTarget observed-sequence for that task. Retrieve that team's chronological on-ball actions, including passes and receptions, without completion-only filtering unless explicitly requested. Receptions are control events, not pass-style successful/failed attempts; do not apply a result filter to receive. Explain the supported sequence or repeated connection in football language. A shot total alone does not describe an approach. Include only facts necessary for the requested explanation: an unrelated opponent's action, foot or technique is not useful merely because it is true. Do not infer a manager's plan, formation, pressing, possession dominance or a player's intention from these actions. When the sample cannot establish a broader style, describe the concrete play that is supported and briefly qualify the broader conclusion. For a requested player involvement assessment, inspect relevant player contributions and actual sequences rather than selecting a player from the latest event. A proposed player must use that player's own positive contributions, not team totals. MentionedPlayers contains names actually referred to in the question or its resolved conversation; do not enumerate arbitrary roster IDs when the question names only a club.`;
 
 const actionOntology={pass:'A pass attempt; result true/false/null means completed/unsuccessful/pending. Recipient identity is available without filtering for completion: a completed pass confirms its recipient, while a failed/pending pass identifies only its recorded target. Asking who a pass was to does not license an outcome filter or substitution of an older completed pass.',receive:'Control following a pass, not evidence of taking possession back from the opponent. Do not filter generic receive records by a pass-style success flag.',recovery:'A broad provider control event; recoveryClass distinguishes a ball-win from initial-control. Regained possession requires type recovery with recoveryClass ball-win. Segment-start control is not a ball won.',shot:'A shot attempt independently of its eventual outcome; result filters must follow requested outcome qualifiers.'};
 const viewerProfilePolicy=`viewerProfile is a validated presentation preference, never evidence or a replacement for the question. Explicit requested players, teams, actions, comparisons, windows and filters always take priority over favourites. A favourite club must not bias a winner, comparison or factual conclusion. A favourite player can resolve a genuinely deictic request only when favoritePlayerResolution is resolved and the actual question/conversation supports that referent; never silently restrict a general match question. An absent or ambiguous favourite stays unresolved and cannot be treated as a participant with zero actions. For newcomer, explain an unfamiliar football concept in plain language when it helps the requested answer. For analyst, use the requested comparisons, relevant evidence and limits precisely when an assessment or explanation is requested. For player focus, discuss the requested player's role and linked actions when relevant. Do not add unasked statistics or extra claims merely to make audiences look different. Simple factual answers may correctly be identical. Review coverage against the actual question before considering audience style.`;
@@ -367,7 +371,8 @@ function compositionSchema(manifest,requestedForm,explanationTarget=null,answerF
   const stories=manifest.facts.filter(fact=>fact.proof.kind==='linked-goal-sequence');
   if(requestedForm==='explanation'&&stories.length)modes.push(strictObject({mode:{type:'string',enum:['facts']},factIds:{type:'array',minItems:1,maxItems:1,items:{type:'string',enum:stories.map(fact=>fact.id)}}}));
   const comparisons=manifest.facts.filter(fact=>fact.proof.kind==='team-comparison');
-  const supports=manifest.facts.filter(fact=>fact.proof.kind==='credited-goal-assist'||fact.proof.kind==='event'&&!fact.proof.attributes&&fact.proof.actionOutcome?.status==='goal'||fact.proof.kind==='shooting-profile'&&fact.proof.operands?.[0]?.value>0||fact.proof.kind==='count'&&fact.proof.value>0&&['goals','attempts','shotsOnTarget','completedPasses','ballWins','creditedAssists'].includes(fact.proof.metric));
+  const playerIds=new Set((context.roster||[]).map(player=>player.id));
+  const supports=manifest.facts.filter(fact=>fact.proof.kind==='credited-goal-assist'||fact.proof.kind==='event'&&!fact.proof.attributes&&fact.proof.actionOutcome?.status==='goal'||playerIds.has(fact.proof.subjectId)&&(fact.proof.kind==='shooting-profile'&&fact.proof.operands?.[0]?.value>0||fact.proof.kind==='count'&&fact.proof.value>0&&['goals','attempts','shotsOnTarget','completedPasses','ballWins','creditedAssists'].includes(fact.proof.metric)));
   if(!context.repair&&requestedForm==='assessment'&&answerFocus==='player-assessment'&&context.explicitPlayerCount===0&&context.componentCount===1&&supports.length&&context.roster?.length)focusedModes=[strictObject({mode:{type:'string',enum:['player-pick']},playerId:{type:'string',enum:context.roster.map(player=>player.id)},factIds:{type:'array',minItems:1,maxItems:1,items:{type:'string',enum:supports.map(fact=>fact.id)},description:'Select the strongest relevant positive contribution by your provisional pick. Prefer a goal or explicit assist when decisive; do not select a team total or an unrelated player.'}})];
   const attacking=comparisons.filter(fact=>['attempts','shotsOnTarget'].includes(fact.proof.metric)&&(context.requestedEvidence||[]).some(source=>source.query.timeFrom===fact.proof.timeFrom&&source.query.timeTo===fact.proof.timeTo&&!!source.query.timeFromExclusive===!!fact.proof.timeFromExclusive&&!!source.query.timeToExclusive===!!fact.proof.timeToExclusive));
   if(!context.repair&&requestedForm==='assessment'&&answerFocus==='team-attacking-assessment'&&context.componentCount===1&&attacking.length)focusedModes=[strictObject({mode:{type:'string',enum:['facts']},factIds:{type:'array',minItems:1,maxItems:1,items:{type:'string',enum:attacking.map(fact=>fact.id)},description:'Use the most relevant qualified attacking comparison in the requested window; a measured tie is a valid answer. Do not infer pressing intensity or possession.'}})];
@@ -614,18 +619,19 @@ export async function answerMatchQuestionAI(input,{config=configuration(),fetche
     queries.items.anyOf.push(inspection);
    }
    const passPermission=passQuerySelectionPermission(input),sharedFilters=new Map();
-   if(passPermission.constrained)for(const variant of queries.items.anyOf){
+   for(const variant of queries.items.anyOf){
     const filterUnion=variant.properties.filters;
     if(!filterUnion.anyOf)continue; // ID inspection already forbids every extra filter.
     const template=filterUnion.anyOf.find(branch=>branch.properties);
-    const pass=structuredClone(template),other=structuredClone(template),untyped=structuredClone(template);
+    const pass=structuredClone(template),other=structuredClone(template),control=structuredClone(template),untyped=structuredClone(template);
     pass.properties.type={type:'string',enum:['pass']};
     const nullableValues=(type,values)=>values.length?{anyOf:[{type,enum:values},{type:'null'}]}:{type:'null'};
-    pass.properties.result=nullableValues('boolean',passPermission.results);
-    pass.properties.outcome=nullableValues('string',passPermission.outcomes);
-    other.properties.type={type:'string',enum:matchQueryDefinition.parameters.properties.filters.properties.type.enum.filter(type=>type!=='pass')};
-    untyped.properties.type={type:'null'};untyped.properties.result={type:'null'};untyped.properties.outcome={type:'null'};
-    const constrained={anyOf:[pass,other,untyped,...filterUnion.anyOf.filter(branch=>!branch.properties)],description:'Pass outcome filters are licensed by the actual request. A recipient question does not imply completion; null leaves the outcome unrestricted. Other explicit event types retain their own filters.'};
+    if(passPermission.constrained){pass.properties.result=nullableValues('boolean',passPermission.results);pass.properties.outcome=nullableValues('string',passPermission.outcomes);}
+    other.properties.type={type:'string',enum:['shot']};
+    control.properties.type={type:'string',enum:['receive','recovery','flight']};control.properties.result={type:'null'};control.properties.outcome={type:'null'};
+    untyped.properties.type={type:'null'};
+    if(passPermission.constrained){untyped.properties.result={type:'null'};untyped.properties.outcome={type:'null'};}
+    const constrained={anyOf:[pass,other,control,untyped,...filterUnion.anyOf.filter(branch=>!branch.properties)],description:'Pass outcome filters are licensed by the actual request. Receptions and recoveries are control events, and flights are samples; their placeholder result flags are not success/failure outcomes. Leave result and outcome null for these types. Shots retain their real outcome filters.'};
     const identity=JSON.stringify(constrained);
     if(!sharedFilters.has(identity)){
      const name=`permittedPassFilters${sharedFilters.size}`;sharedFilters.set(identity,name);
@@ -704,7 +710,7 @@ export async function answerMatchQuestionAI(input,{config=configuration(),fetche
    schema.properties.claims.items.properties.evidence.description='General rules cite selected knowledge facts with their exact version. Only event/scope references can support match observations or interpretations.';
   }
   if(stage==='repair'&&!canonicalStage)schema.properties.claims.maxItems=requestComponents(input.question).length>1?4:3;
-  const format=structuredFormat(planningStage?'match_answer_or_query':stage==='review'?'match_answer_review':ruleSelectionStage?'rule_fact_selection':'match_answer',schema);
+  const format=structuredFormat(planningStage?'match_answer_or_query':stage==='review'?'match_answer_review':ruleSelectionStage?'rule_fact_selection':'match_answer',planningStage?compactRepeatedSchema(schema):schema);
   modelCalls++;const result=await azureCompletion(messages,{config,fetcher,signal,responseFormat:format,temperature:0,maxCompletionTokens,timeoutMs:30000});
   usage.promptTokens+=result.usage?.prompt_tokens||0;usage.completionTokens+=result.usage?.completion_tokens||0;
   stages.push({stage,elapsedMs:Date.now()-stageStarted,promptTokens:result.usage?.prompt_tokens??null,completionTokens:result.usage?.completion_tokens??null});
@@ -810,8 +816,8 @@ export async function answerMatchQuestionAI(input,{config=configuration(),fetche
   responseLanguage:packet.responseLanguage,actionOntology,players:roster,teams:packet.teams,currentTime:state.time,observedAt:state.time,observedClock:packet.observedClock,timeUnit:packet.timeUnit,
   ...(planningMoment?{selectedMoment:planningMoment}:{}),...(ambiguousQueries.length?{ambiguousPlayerMentions:ambiguousQueries.map(query=>query.entityResolution.player)}:{}),
   limits:packet.limits,allowedOperationMetrics:permissions.metrics,allowedOperations:permissions.subjects,allowedOperationWindow:permissions.window,passSelectionPermission:passQuerySelectionPermission(input),footballKnowledgeCatalog,footballKnowledgeVersion,
-  tool:{...matchQueryDefinition,description:'Read received events using exact filters, bounded windows, complete counts and grouped totals.'}};
- let plannedResponse=await complete([{role:'system',content:exclusivePlanningPolicy+'\n'+operationMetricPolicyDescription},
+  tool:{name:matchQueryDefinition.name,description:'Read received events using exact filters, bounded windows, complete counts and grouped totals. The response schema declares every permitted query field and constraint.'}};
+ let plannedResponse=await complete([{role:'system',content:exclusivePlanningPolicy+'\n'+operationMetricPolicyDescription+'\n'+teamStylePolicy},
   {role:'user',content:JSON.stringify(firstPacket)}],900,'answer-or-query');
  let first,exclusiveQueryRoute,generalRoute,footballKnowledge,bareAnswer,structuredEnvelope,entityQueries,operationPlan,operationPlanNormalization,operation,planned,queryRelations=[];
  let planningRepairs=0;
@@ -847,7 +853,7 @@ export async function answerMatchQuestionAI(input,{config=configuration(),fetche
    entityQueries=[];
    if(first.mentionedPlayers!==undefined){
     if(!Array.isArray(first.mentionedPlayers)||first.mentionedPlayers.length>3||first.mentionedPlayers.some(name=>typeof name!=='string'||!name.trim()||name.length>100||/[\u0000-\u001f]/.test(name)))throw new GenerationError('The player references could not be resolved.');
-    entityQueries=generalRoute?[]:[...new Set(first.mentionedPlayers)].map(player=>run({filters:{player},aggregate:'count'}));
+    entityQueries=generalRoute?[]:[...new Set(first.mentionedPlayers)].filter(player=>!sourceClubSide(player,packet.teams,roster)).map(player=>run({filters:{player},aggregate:'count'}));
    }
    if(clarifyAmbiguousInput)entityQueries=[...ambiguousQueries,...entityQueries.filter(query=>!ambiguousIds.has(query.entityResolution.player.canonicalId)&&query.entityResolution.player.status!=='ambiguous')];
    if(first.operationPlan!==undefined&&first.operationPlan!==null){
@@ -875,7 +881,12 @@ export async function answerMatchQuestionAI(input,{config=configuration(),fetche
    if(!clarifyAmbiguousInput&&!operation?.proofs.length&&!bareAnswer&&!(Object.hasOwn(first,'draft')&&first.draft!==null&&!first.queries?.length)){
     if(!Array.isArray(first.queries)||first.queries.length>3)throw new GenerationError('I could not resolve the match evidence for that question. Please try again.');
     try{for(const [queryIndex,query] of first.queries.entries()){
-     const relation=resolvePlannedRelation(normalizePlannedQuery(structuredEnvelope?omitUnusedQueryFields(query):query,state.time),planned,state.time,roster),normalized=relation.query;
+     const typedQuery=normalizeClubActorQuery(structuredEnvelope?omitUnusedQueryFields(query):query,packet.teams,roster);
+     const relation=resolvePlannedRelation(normalizePlannedQuery(typedQuery,state.time),planned,state.time,roster),normalized=relation.query;
+     if(['receive','recovery','flight'].includes(normalized?.filters?.type)&&['result','outcome'].some(field=>Object.hasOwn(normalized.filters,field))){
+      const error=new GenerationError('Control events and visual samples do not have pass-style success or shot outcomes.');
+      error.planningCorrection={kind:'invalid-control-outcome',queryIndex,instruction:'Set result and outcome to null for receive, recovery and flight. Preserve the actor, time window and ordering. For a failed pass or shot outcome, query that actual event type instead.'};throw error;
+     }
      if(normalized?.filters?.id!==undefined&&normalized.filters.id!==planningMoment?.id)throw new GenerationError('An event ID filter requires the explicitly referenced moment.');
      if(normalized?.filters?.id!==undefined&&(Object.keys(normalized.filters).some(field=>field!=='id')||normalized.aggregate!==undefined&&normalized.aggregate!=='list'||normalized.timeFrom!==undefined&&normalized.timeFrom!==0||normalized.timeTo!==undefined&&normalized.timeTo!==state.time))throw new GenerationError('Inspect an event ID alone with a list query, without extra filters or a narrower window.');
      if(!passQueryOutcomeAllowed(input,normalized)){
@@ -965,7 +976,7 @@ export async function answerMatchQuestionAI(input,{config=configuration(),fetche
    rawDraft={scope:'general',claims:selection.factIds.map(id=>({text:facts.find(fact=>fact.id===id).text,kind:'general',evidence:[{type:'knowledge',id,version:footballKnowledge.version}],dependsOn:[]})),followUp:''};
    modelPacket={...modelPacket,responseLanguage:'en',ruleRendering:canonicalRuleSelection};
   }else {rawDraft=matchFactManifest?directQuestionFacts(modelPacket,matchFactManifest,{focus:answerFocus,form:requestedForm,passAccuracyRequested:permissions.metrics.includes('passCompletionRate')}):null;
-   if(!rawDraft)rawDraft=await complete([{role:'system',content:analystPolicy+'\n'+assessmentPolicy+'\n'+premisePolicy+'\n'+requestedEvidencePolicy+'\n'+routePolicy},{role:'user',content:JSON.stringify(writerPacket(modelPacket))}],650,'answer-after-query');
+   if(!rawDraft)rawDraft=await complete([{role:'system',content:analystPolicy+'\n'+assessmentPolicy+'\n'+premisePolicy+'\n'+requestedEvidencePolicy+'\n'+routePolicy+'\n'+teamStylePolicy},{role:'user',content:JSON.stringify(writerPacket(modelPacket))}],650,'answer-after-query');
   }
  }
  let replayClaimIndices=new Set();
@@ -1151,6 +1162,6 @@ For a rosterResolution error, use one concise roster correction or clarification
   matchId:state.metadata.id,observedAt:state.time,viewerProfile,language:canonicalRuleSelection?'en':input.language||'en',lookups:queryResults.map(q=>({query:q.query,count:q.count,scope:q.scope})),moments,evidence,totalMoments:replayEvents.length,truncated:replayEvents.length>8,
   notices:draft.scope==='general'?[...(canonicalRuleSelection&&canonicalRuleSelection.requestedLanguage!=='en'?['Selected rule references are currently available in English.']:[]),{en:'General football explanation, not an analysis of this match.',es:'Explicacion general de futbol, no un analisis de este partido.',fr:'Explication generale du football, pas une analyse de ce match.',pt:'Explicacao geral de futebol, nao uma analise deste jogo.'}[input.language||'en']]:[],
   provenance:draft.canonicalFactSelection?.selectedFactIds.length?{source:'verified-facts-with-ai-analysis',modelGenerated:draft.claimProvenance.some(claim=>claim.modelGenerated),aiInterpreted:true,label:'Application-rendered match facts with separately identified AI interpretation'}:canonicalRuleSelection?{source:'verified-rule-facts',modelGenerated:false,aiInterpreted:true,label:'Application-rendered English rule references; AI selected facts and reviewed relevance'}:repairMode==='verified-lineup-resolution'?{source:'verified-lineup-resolution',modelGenerated:false,aiInterpreted:true,label:'Application-rendered lineup clarification; AI identified the requested name'}:{source:'azure-grounded-conversation',modelGenerated:true,aiInterpreted:true,label:'AI analysis with received evidence and model editorial review'},
-  execution:{modelCalls,repairs:repairs+planningRepairs,planningRepairs,repairMode:repairMode||(planningRepairs?'planning-repair':null),toolCalls:queryResults.length,elapsedMs:Date.now()-started,usage,stages}};
+  execution:{modelCalls,requestedForm,answerFocus,explanationTarget,repairs:repairs+planningRepairs,planningRepairs,repairMode:repairMode||(planningRepairs?'planning-repair':null),toolCalls:queryResults.length,elapsedMs:Date.now()-started,usage,stages}};
  return {...output,key:'question:'+createHash('sha256').update(JSON.stringify(output)).digest('hex')};
 }
