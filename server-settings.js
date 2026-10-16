@@ -8,7 +8,7 @@ export function serverSettings(env={}){
  if(publicHost&&(!token||token.length<32))throw new Error('Public binding requires APP_ACCESS_TOKEN with at least 32 characters.');
  if(publicHost&&!env.PUBLIC_ORIGIN)throw new Error('Public binding requires an HTTPS PUBLIC_ORIGIN.');
  const origins=[`http://localhost:${port}`,`http://127.0.0.1:${port}`];
- if(env.PUBLIC_ORIGIN){const url=new URL(env.PUBLIC_ORIGIN);if(url.protocol!=='https:'||url.pathname!=='/'||url.search||url.hash||url.username||url.password)throw new Error('PUBLIC_ORIGIN must be an HTTPS origin.');origins.push(url.origin);}
+ for(const value of [env.PUBLIC_ORIGIN,env.PUBLIC_DEPLOYMENT_ORIGIN].filter(Boolean)){const url=new URL(value);if(url.protocol!=='https:'||url.pathname!=='/'||url.search||url.hash||url.username||url.password)throw new Error('PUBLIC_ORIGIN must be an HTTPS origin.');if(!origins.includes(url.origin))origins.push(url.origin);}
  const dailyModelCalls=Number(env.MAX_DAILY_MODEL_CALLS||100);
  if(!Number.isInteger(dailyModelCalls)||dailyModelCalls<1||dailyModelCalls>10000)throw new Error('Invalid daily model-call limit.');
  return {host,port,token,origins,dailyModelCalls,publicHost};

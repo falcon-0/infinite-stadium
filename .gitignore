@@ -6,3 +6,7 @@ artifacts/
 .venv/
 __pycache__/
 .runtime/
+.vercel/
+
+.vercel
+.env*

@@ -1,6 +1,14 @@
 # Deployment handover
 
-October 14, 2026. This is an executable preparation guide, not a completed deployment. The current local app uses Node.js; Docker's Linux daemon is unavailable on the development computer. No hosting resource or billing upgrade has been created by this pass.
+October 16, 2026. Vercel Hobby project `infinite-stadium` and its Free Upstash store are provisioned. Production URL: https://infinite-stadium-lime.vercel.app. Health, assets, authentication/revocation, private-file blocking, terminal SSE and one real Azure scorer question passed on October 16. Automatic storage upgrades are disabled. Docker remains an alternative for a persistent Node host.
+
+## Vercel runtime
+
+`vercel.json` routes requests to `api/index.js`, which adapts the existing Node server without opening a listener. Configure Azure credentials and APP_ACCESS_TOKEN as production secrets. Vercel supplies the trusted production hostname; Upstash supplies KV_REST_API_URL and KV_REST_API_TOKEN (the UPSTASH_REDIS_REST_* names are also supported). Never expose these values in frontend settings.
+
+The shared store preserves session revocation and atomic daily model reservations across serverless instances. Storage outages block inference. Seed the current UTC day's shared counter from the existing development ledger using SET NX, never overwrite an existing counter. MAX_DAILY_MODEL_CALLS is a request cap, not a dollar budget. Preview deployments have no inference credentials unless explicitly configured. Continuous event streams are bounded by the function's 300-second duration; the client reconnect behavior must be checked on the deployed host.
+
+Azure hosting remains possible using the ordinary Node entry point and a persistent ledger. Switching model accounts requires server-only configuration changes and a connection check; it does not extend an expired trial automatically.
 
 ## Decide what judges will receive
 

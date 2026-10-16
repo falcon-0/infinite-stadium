@@ -1,12 +1,17 @@
 # Infinite Stadium submission preparation
 
-Current status: October 15, 2026. The Innovation Studio project profile exists at https://innovationstudio.microsoft.com/hackathons/insidethegamedeveloperhackathon/project/126399 and is linked to the challenge. Creating that profile did not complete the competition submission.
+Current status: October 16, 2026. The Innovation Studio project profile exists at https://innovationstudio.microsoft.com/hackathons/insidethegamedeveloperhackathon/project/126399 and is linked to the challenge. Creating that profile did not complete the competition submission.
 
 A focused 71.04-second captioned Watch demo is prepared locally at `artifacts/demo/infinite-stadium-demo.mp4`, using genuine Azure answers, follow-up context and uninterrupted playback. It has not been published and does not demonstrate all Studio features. The latest v62 release passed all eight local gates (1,079 passed, one optional/platform skip). A six-question Azure development check now covers first scorer, explicit assist, provisional player pick, linked buildup, a genuine follow-up and recent shooting activity. The final reviewed answers took 10.3–22.0 seconds and two or three model calls. The pressure case needed a targeted reviewer-prompt fix; prior failed and verbose results remain in the audit. This is a tuned development sample across consecutive builds, not a broad reliability score.
 
-The combined local Watch/Studio demo is now `artifacts/demo/infinite-stadium-watch-studio-demo.mp4` (94.08 seconds, silent with captions). Studio correction and replacement approval checks passed without inference. The false-score correction, metric-qualified keeper comparison and provisional player assessment have returned useful Azure answers. The final-pass lookup now succeeds with an executed ordering proof. Two targeted shot-choice phrasings now return specific uncertainty on Azure; motives remain unrecorded. The same two questions now return one saved-shot fact and one specific unknown-reason statement in 15.8–16.4 seconds with three calls, versus 32.7–35.3 seconds and four calls before. This small tuned comparison is not a general response-time guarantee. Past withheld responses remain in the audit. Public access and trial continuity remain unresolved.
+The combined local Watch/Studio demo is now `artifacts/demo/infinite-stadium-watch-studio-demo.mp4` (94.08 seconds, silent with captions). Studio correction and replacement approval checks passed without inference. The false-score correction, metric-qualified keeper comparison and provisional player assessment have returned useful Azure answers. The final-pass lookup now succeeds with an executed ordering proof. Two targeted shot-choice phrasings now return specific uncertainty on Azure; motives remain unrecorded. The same two questions now return one saved-shot fact and one specific unknown-reason statement in 15.8–16.4 seconds with three calls, versus 32.7–35.3 seconds and four calls before. This small tuned comparison is not a general response-time guarantee. Past withheld responses remain in the audit. Public access now works; trial continuity remains unresolved.
 
 Four additional tuned fan questions now have developer-audited Azure answers: keeper involvement, individual passing accuracy, the latest left-foot attempt and correction of an assumed penalty miss. Final answers took21.5–32.9seconds across consecutive builds. Raw failures and network interruptions remain preserved; these samples do not establish broad accuracy or speed.
+
+
+Latest deployment validation (October 16): all eight local release gates passed, with 1,084 tests passed and one platform-specific skip. Production health/assets passed; private files returned 404; authenticated Azure answered "Who scored first?" with A. Reed at 01:56 and two calls. Shared reservations advanced from 10 to 12 without resetting the existing ledger. Logout revoked access. Production SSE delivered two terminal frames and completion; the browser clock and statistics advanced during playback. This is a bounded deployment check, not a broad AI accuracy certificate.
+
+A 116.07-second, 1080p motion graphics owner-review cut is prepared at `artifacts/demo/infinite-stadium-motion-demo-v1.mp4`. It retains genuine 94.08-second Watch/Studio footage and waits, plus a clearly separated synthetic goal diagram. It is silent and has not been uploaded to YouTube. The required public video URL must be on YouTube, Vimeo, Facebook Video or Youku; GitHub MP4 downloads are supplemental only.
 
 ## Ready-to-use project description
 
@@ -16,7 +21,7 @@ The Watch experience combines a schematic 22-player replay, synchronized score a
 
 Studio serves producers separately: audience-specific treatments, graphic previews, correction-aware approvals and timed rundown exports. When a provider amends an event, affected approvals require renewed review. It is a local production prototype, not a connected broadcast system.
 
-The integrated Azure inference path uses a Microsoft Foundry deployment of GPT-4.1 mini with custom Node orchestration. An optional local structured workflow uses Microsoft Agent Framework with Ollama. The web application currently runs locally; Azure application hosting remains outstanding.
+The integrated Azure inference path uses a Microsoft Foundry deployment of GPT-4.1 mini with custom Node orchestration. An optional local structured workflow uses Microsoft Agent Framework with Ollama. The website is deployed on Vercel Hobby at https://infinite-stadium-lime.vercel.app using the current Azure model and a Free Upstash shared session/usage store. Azure website hosting remains an optional alternative.
 
 ## Official delivery requirements
 
@@ -56,7 +61,7 @@ The final targeted probability regression released a supported shot outcome and 
 | --- | --- |
 | Innovation Studio profile and challenge link | Created |
 | Public GitHub source URL | https://github.com/falcon-0/infinite-stadium |
-| Judge website or test-build URL | Downloadable test build in the GitHub demo release; hosted AI access still pending |
+| Judge website or test-build URL | https://infinite-stadium-lime.vercel.app (AI requires private project access code) |
 | Public video URL | GitHub demo release asset: infinite-stadium-watch-studio-demo.mp4 (94.08 seconds, earlier genuine capture) |
 | Final category | Provisional Best Multi-Agent System; justify using measured benefit |
 | Final release commit | Pending freeze after final checks |

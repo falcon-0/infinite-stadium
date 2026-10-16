@@ -47,18 +47,20 @@ function budgetFilename(value){
     existsSync(filename)&&lstatSync(filename).isSymbolicLink())throw new Error('Invalid model budget file configuration.');
  return filename;
 }
-export function createServer({env=process.env,fetcher=fetch,localRunner,localStatusReader=localStatus}={}){
+export function createServer({env=process.env,fetcher=fetch,localRunner,localStatusReader=localStatus,sharedBudget,sharedAccess}={}){
  const settings=serverSettings(env),filename=budgetFilename(env.MODEL_BUDGET_FILE);
- if(settings.publicHost&&env.AZURE_OPENAI_ENDPOINT&&env.AZURE_OPENAI_DEPLOYMENT&&env.AZURE_OPENAI_API_KEY&&!filename)
+ if(sharedBudget&&!(sharedBudget.durable===true&&typeof sharedBudget.snapshot==='function'&&typeof sharedBudget.take==='function'))throw new Error('Invalid shared model budget.');
+ if(settings.publicHost&&env.AZURE_OPENAI_ENDPOINT&&env.AZURE_OPENAI_DEPLOYMENT&&env.AZURE_OPENAI_API_KEY&&!filename&&!sharedBudget)
   throw new Error('Public Azure hosting requires MODEL_BUDGET_FILE in the project .runtime directory. Mount that directory on persistent storage.');
- const budget=filename?
-  createPersistentModelBudget({limit:settings.dailyModelCalls,filename}):modelBudget(settings.dailyModelCalls);
- const access=createAccessSessions(settings);
+ const budget=sharedBudget||(filename?
+  createPersistentModelBudget({limit:settings.dailyModelCalls,filename}):modelBudget(settings.dailyModelCalls));
+ const access=sharedAccess||createAccessSessions(settings);
  const local=env.AI_PROVIDER==='local';
  if(local&&settings.publicHost)throw new Error('Local inference currently requires loopback hosting.');
  let generating=false,streams=0;
- const countedFetch=async(...args)=>{args[1]?.signal?.throwIfAborted();budget.take();return fetcher(...args);};
+ const countedFetch=async(...args)=>{args[1]?.signal?.throwIfAborted();await budget.take();args[1]?.signal?.throwIfAborted();return fetcher(...args);};
  const server=http.createServer(async (req, res) => {
+  try {
   let requestURL;
   try{requestURL=new URL(req.url,'http://localhost');}
   catch{json(res,400,{error:'Invalid request URL.'});return;}
@@ -88,7 +90,7 @@ export function createServer({env=process.env,fetcher=fetch,localRunner,localSta
    return;
   }
   if(path==='/api/access'&&['POST','DELETE'].includes(req.method)){
-   try{if(req.method==='POST')access.authenticate(req,res);else access.clear(req,res);json(res,200,{authenticated:access.status(req)||req.method==='POST'});}
+   try{if(req.method==='POST')await access.authenticate(req,res);else await access.clear(req,res);json(res,200,{authenticated:req.method==='POST'||await access.status(req)});}
    catch(error){json(res,error instanceof GenerationError?error.status:500,{error:error instanceof GenerationError?error.message:'Unable to update AI access.'});}
    return;
   }
@@ -152,12 +154,12 @@ export function createServer({env=process.env,fetcher=fetch,localRunner,localSta
   }
   if(path==='/api/ai/status'&&req.method==='GET') {
     try {
-      const accessStatus={authRequired:!!settings.token&&!access.status(req),accessConfigured:!!settings.token};
+      const accessStatus={authRequired:!!settings.token&&!(await access.status(req)),accessConfigured:!!settings.token};
       if(local){json(res,200,{...await localStatusReader(),...accessStatus});return;}
       const status={provider:'azure',configured:!!configuration(env),connected:false,...accessStatus};
       if(!status.configured){json(res,200,{...status,available:false});return;}
       try{
-        const modelBudget=budget.snapshot(),available=modelBudget.calls<modelBudget.limit;
+        const modelBudget=await budget.snapshot(),available=modelBudget.calls<modelBudget.limit;
         json(res,200,{...status,available,questionAvailable:modelBudget.limit-modelBudget.calls>=3,modelBudget,...(!available?{error:'Daily model-call limit reached. Recorded insights remain available.'}:{})});
       }catch{json(res,200,{...status,available:false,error:'AI request counter is unavailable. Recorded insights remain available.'});}
     }
@@ -166,7 +168,7 @@ export function createServer({env=process.env,fetcher=fetch,localRunner,localSta
   }
   if(path==='/api/studio/recap-cue'&&req.method==='POST'){
     if(req.headers.origin&&!settings.origins.includes(req.headers.origin)){json(res,403,{error:'Origin is not allowed.'});return;}
-    if(!access.isAuthorized(req)){json(res,401,{error:'Authorization required.'});return;}
+    if(!(await access.isAuthorized(req))){json(res,401,{error:'Authorization required.'});return;}
     if(!req.headers['content-type']?.startsWith('application/json')){json(res,415,{error:'Use application/json.'});return;}
     try{
       const chunks=[];let size=0;
@@ -184,7 +186,7 @@ export function createServer({env=process.env,fetcher=fetch,localRunner,localSta
   if(['/api/ai/explain','/api/agent/investigate','/api/agent/story','/api/agent/recap','/api/agent/question'].includes(path)&&req.method==='POST') {
     // Generation is guarded regardless of whether it consumes local compute or cloud credits.
     if(req.headers.origin&&!settings.origins.includes(req.headers.origin)){json(res,403,{error:'Origin is not allowed.'});return;}
-    if(!access.isAuthorized(req)){json(res,401,{error:'Authorization required.'});return;}
+    if(!(await access.isAuthorized(req))){json(res,401,{error:'Authorization required.'});return;}
     if(!req.headers['content-type']?.startsWith('application/json')){json(res,415,{error:'Use application/json.'});return;}
     if(generating){json(res,429,{error:'Another draft is generating. Please wait.',code:'generation-busy'});return;}
     let ownsGeneration=false;
@@ -204,10 +206,10 @@ export function createServer({env=process.env,fetcher=fetch,localRunner,localSta
          let checked;try{checked=answerMatchQuestion(input);}catch{throw new GenerationError('Ask a valid match question of up to 400 characters.',400);}
          if(local)throw new GenerationError('Natural-language question interpretation currently requires Azure. Recorded match search remains available.',503);
          if(!needsQuestionClarification(input)&&!(input.anchorId&&checked.status==='no-results')){
-          const remaining=budget.snapshot();
+          const remaining=await budget.snapshot();
           if(remaining.limit-remaining.calls<3)throw new GenerationError('Daily model-call limit: not enough allowance remains for a complete reviewed answer.',429);
          }
-         json(res,200,await answerMatchQuestionAI(input,{...options,canRepair:(required=2)=>{const remaining=budget.snapshot();return remaining.limit-remaining.calls>=required;}}));
+         json(res,200,await answerMatchQuestionAI(input,{...options,canRepair:async(required=2)=>{const remaining=await budget.snapshot();return remaining.limit-remaining.calls>=required;}}));
         }else json(res,200,await (path==='/api/agent/recap'?generateRecapStory(input,{...options,provider:local?'local':'azure'}):generate(input,options)));
       }finally{res.removeListener('close',cancel);}
     } catch(error){json(res,error instanceof GenerationError?error.status:500,{error:error instanceof GenerationError?error.message:'Unable to generate a draft.',...(error instanceof GenerationError&&error.code?{code:error.code}:{})});}
@@ -222,6 +224,7 @@ export function createServer({env=process.env,fetcher=fetch,localRunner,localSta
     res.writeHead(200, { 'Content-Type': `${types[file.split('.').pop()]}; charset=utf-8`, 'Cache-Control':'no-store' });
     res.end(req.method==='HEAD'?undefined:data);
   } catch { res.writeHead(500); res.end('Unable to load file'); }
+  }catch(error){if(!res.headersSent)json(res,error instanceof GenerationError?error.status:500,{error:error instanceof GenerationError?error.message:'Request is unavailable.'});else res.end();}
 });
  server.requestTimeout=15000;
  return server;

@@ -13,6 +13,7 @@ REQUIRED_FILES = (
     "docs/DEPLOYMENT.md", "docs/SUBMISSION_HISTORY.md", "docs/EVALUATION_EVIDENCE.json",
     "test-fixtures/semantic-obligations-acceptance-v1.json",
     ".github/workflows/verify.yml",
+    "vercel.json", ".vercelignore", "api/index.js",
 )
 SOURCE_SUFFIXES = {".js", ".py", ".ps1"}
 

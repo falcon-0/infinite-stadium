@@ -888,7 +888,7 @@ export async function answerMatchQuestionAI(input,{config=configuration(),fetche
    }
    break;
   }catch(error){
-   if(!(error instanceof GenerationError)||planningRepairs||signal?.aborted||modelCalls>2||!canRepair(3))throw error;
+   if(!(error instanceof GenerationError)||planningRepairs||signal?.aborted||modelCalls>2||!(await canRepair(3)))throw error;
    planningRepairs++;
    plannedResponse=await complete([{role:'system',content:exclusivePlanningPolicy+'\n'+operationMetricPolicyDescription+'\nCorrect this structurally invalid plan once. Use the same question and permitted tools. Fix the reported schema, identity or scope error; do not invent an answer or repeat an invalid field.'},
     {role:'user',content:JSON.stringify({...firstPacket,rejectedPlan:plannedResponse,planningError:error.message,...error.planningCorrection?{planningCorrection:error.planningCorrection}:{}})}],900,'planning-repair');
@@ -1126,7 +1126,7 @@ export async function answerMatchQuestionAI(input,{config=configuration(),fetche
    // not model-generated prose and does not need a second model to invent it.
    draft=lineupClarification;repairs=1;repairMode='verified-lineup-resolution';
   }else{
-  if(5-modelCalls<2||!canRepair(2))throw error;
+  if(5-modelCalls<2||!(await canRepair(2)))throw error;
   repairs=1;
   // Rewrite the complete answer so removing an unsupported claim cannot leave
   // a dangling subject or silently drop the user's actual question.

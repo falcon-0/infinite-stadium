@@ -101,3 +101,6 @@ The recorded video predates a small historical-scope notice fix: later play now 
 `artifacts/demo/infinite-stadium-watch-studio-demo.mp4` is a 94.08-second silent captioned demo, combining the genuine two-turn Azure Watch capture and an actual Studio package workflow. The labelled Studio cut shows recorded-fact outputs, a local approval and preview, receipt of the shot correction, withdrawal of the old graphic, cleared consent and approval of the saved-shot replacement. All five Studio checks passed; recording and editing made no model calls. The approval interaction was automated for this local demonstration, not human editorial validation.
 
 The Watch footage retains its genuine waits and earlier update notices; it predates the v31 notice fix. Studio uses recorded facts, not a newly generated AI story. No footage or answer was fabricated. The combined manifest records the sources, SHA-256 and limitations. This video is ready for owner review; publication and judging-period access remain outstanding.
+
+
+Submission upload: official rule4.4 requires the public demo on YouTube, Vimeo, Facebook Video or Youku. The GitHub MP4 is a supplemental prepared download. A permitted-platform URL remains pending. The prepared title and description are in SUBMISSION.md.
