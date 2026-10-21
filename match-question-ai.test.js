@@ -10,6 +10,7 @@ import {
   requestedQuantitySchema,
   inventoryDependencyCovers,
   canonicalPendingReception,
+  canonicalCompletedReception,
   ordinalDependentScope,
   sourceAttributeReviewBudget,
   requestedSourceAttributeIssues,
@@ -20248,4 +20249,142 @@ test('a source identity clarification restores the original cause question witho
   assert.equal(answer.questionResolution.clarifiedAt, 70);
   assert.match(answer.answer, /Cole/);
   assert.match(answer.answer, /doesn't establish/);
+});
+
+test('confirmed pass recipients fulfill reception without accepting a failed target or stale proof', () => {
+  const source = executeMatchQuery(
+    { kind: 'sustained', seed: 17, time: 120 },
+    {
+      filters: { type: 'pass', result: true },
+      aggregate: 'list',
+      order: 'desc',
+      limit: 1,
+      timeFrom: 90,
+      timeTo: 120,
+    },
+  );
+  const row = source.rows[0];
+  const eventRef = { type: 'event', id: row.id, revision: row.revision };
+  const answer = { claims: [{ kind: 'observation', evidence: [eventRef, source.scopeReference] }] };
+  const packet = { observedAt: 120, requestedEvidence: [source], queryResults: [source] };
+  const selection = {
+    proofs: [
+      {
+        kind: 'ordered-event',
+        modelGenerated: false,
+        scope: source.scopeReference,
+        timeFrom: 90,
+        timeTo: 120,
+        event: {
+          kind: 'event',
+          modelGenerated: false,
+          eventType: 'pass',
+          eventId: row.id,
+          revision: row.revision,
+          playerId: row.playerId,
+          time: row.time,
+          actionOutcome: { status: 'completed' },
+          recipientStatus: 'confirmed-recipient',
+          recipient: { status: 'confirmed-recipient', playerId: row.receiverId },
+        },
+      },
+    ],
+  };
+  assert.ok(row.receiverId);
+  assert.equal(canonicalCompletedReception(0, answer, packet, selection), true);
+  assert.equal(canonicalPendingReception(0, answer, packet, selection), false);
+  for (const change of [
+    (s) => s.proofs[0].event.revision++,
+    (s) => (s.proofs[0].event.recipient.playerId = 'away-1'),
+    (s) => (s.proofs[0].event.actionOutcome.status = 'pending'),
+    (s) => (s.proofs[0].event.recipientStatus = 'recorded-target'),
+    (s) => (s.proofs[0].timeFrom = 100),
+  ]) {
+    const bad = structuredClone(selection);
+    change(bad);
+    assert.equal(canonicalCompletedReception(0, answer, packet, bad), false);
+  }
+  for (const value of [false, null, undefined]) {
+    const bad = structuredClone(packet);
+    bad.requestedEvidence[0].rows[0].result = value;
+    assert.equal(canonicalCompletedReception(0, answer, bad, selection), false);
+  }
+  const stale = structuredClone(packet);
+  stale.queryResults[0].rows.push({ ...row, revision: row.revision + 1 });
+  assert.equal(canonicalCompletedReception(0, answer, stale, selection), false);
+});
+
+test('unknown distance ranking cannot substitute a latest pass or its recipient', async () => {
+  const input = {
+    kind: 'sustained',
+    seed: 17,
+    time: 120,
+    question: 'Who completed the longest pass in the last thirty seconds, and who received it?',
+  };
+  const mock = sequenceTransport([
+    {
+      answerFocus: 'event-actor',
+      explanationTarget: 'none',
+      requestedForm: 'fact',
+      mentionedPlayers: [],
+      requestedSourceAttributes: null,
+      decision: {
+        kind: 'queries',
+        queries: [
+          {
+            filters: { type: 'pass', result: true },
+            aggregate: 'list',
+            order: 'desc',
+            limit: 1,
+            timeFrom: 90,
+            timeTo: 120,
+          },
+        ],
+      },
+    },
+    (packet, body) => {
+      const facts = packet.matchFacts.facts;
+      const limitation = facts.find(
+        (fact) => fact.selection.kind === 'source-measurement-limitation',
+      );
+      assert.ok(limitation);
+      const schema = resolvedWireSchema(body);
+      assert.deepEqual(schema.properties.composition.anyOf[0].properties.factIds.items.enum, [
+        limitation.id,
+      ]);
+      assert.equal(schema.properties.composition.anyOf[0].properties.factIds.maxItems, 1);
+      return {
+        scope: 'match',
+        composition: { mode: 'facts', factIds: [limitation.id] },
+        followUp: '',
+      };
+    },
+    (packet) => ({
+      decision: 'approve',
+      requestCheck: {
+        status: 'useful-limitation',
+        requestedInformation: input.question,
+        reason: 'The ranked winner and its recipient cannot be established.',
+        responseIntent: {
+          purpose: 'fact-retrieval',
+          needsAssessment: false,
+          needsExplicitCorrection: false,
+          needsScoreline: false,
+          needsMeasurementLimitation: true,
+          reason: 'Distance ranking is not supported by the tools.',
+        },
+        coverage: packet.requestComponents.map((requestSpan) => ({
+          requestSpan,
+          claimIndices: [0],
+          answerForm: 'unavailable-measurement',
+          requestedAction: 'other',
+          requestedSourceAttributes: null,
+        })),
+      },
+    }),
+  ]);
+  const result = await answerMatchQuestionAI(input, { config, fetcher: mock.fetcher });
+  assert.match(result.answer, /can't establish/);
+  assert.doesNotMatch(result.answer, /Latest|Cole|Reed|01:50/);
+  assert.equal(result.execution.modelCalls, 3);
 });

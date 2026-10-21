@@ -189,7 +189,7 @@ export function matchEvidenceCapabilities(packet) {
       'received event actor, time and explicitly recorded result',
       'counts only within the cited query scope and coverage',
     ],
-    unavailableMeasurements: ['possession', 'pressing', 'xG', 'readiness'],
+    unavailableMeasurements: ['possession', 'pressing', 'xG', 'readiness', 'passDistanceRanking'],
     unavailable: [
       'who forced a mistake or turnover',
       'player intention',

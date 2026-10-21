@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { executeMatchQuery } from './match-query.js';
 import { matchState } from './match-stream.js';
+import { actionOutcome } from './action-evidence.js';
 
 const metrics = [
   'completedPasses',
@@ -10,6 +11,7 @@ const metrics = [
   'recoveries',
   'creditedAssists',
   'passCompletionRate',
+  'shotOnTargetRate',
 ];
 const strict = (properties) => ({
   type: 'object',
@@ -43,6 +45,7 @@ const filters = {
   attempts: { type: 'shot' },
   goals: { type: 'shot', result: true },
   shotsOnTarget: { type: 'shot', outcome: 'on-target' },
+  shotOnTargetRate: { type: 'shot' },
   recoveries: { type: 'recovery', recoveryClass: 'ball-win' },
   creditedAssists: { type: 'shot', result: true },
 };
@@ -330,7 +333,8 @@ export function executeOperationPlan(input, plan, { state, stateFactory = matchS
     ids.add(obligation.id);
     const subjects = obligation.subjects;
     if (
-      (obligation.operator === 'ratio') !== (obligation.metric === 'passCompletionRate') ||
+      (obligation.operator === 'ratio') !==
+        ['passCompletionRate', 'shotOnTargetRate'].includes(obligation.metric) ||
       (obligation.operator === 'ratio' && subjects.some((id) => !isTeam(id)))
     )
       throw new RangeError(
@@ -350,7 +354,15 @@ export function executeOperationPlan(input, plan, { state, stateFactory = matchS
       timeTo: obligation.timeTo,
     };
     let queries;
-    if (obligation.operator === 'ratio') {
+    if (obligation.operator === 'ratio' && obligation.metric === 'shotOnTargetRate') {
+      queries = [{ type: 'shot', outcome: 'on-target' }, { type: 'shot' }].map((filters) => ({
+        ...queryBase,
+        filters,
+        aggregate: 'by-team',
+        order: 'asc',
+        limit: 20,
+      }));
+    } else if (obligation.operator === 'ratio') {
       queries = [true, false, null].map((result) => ({
         ...queryBase,
         filters: { type: 'pass', result },
@@ -466,7 +478,106 @@ export function executeOperationPlan(input, plan, { state, stateFactory = matchS
       proofs.push(proof);
       continue;
     }
-    if (o.operator === 'ratio') {
+    if (o.operator === 'ratio' && o.metric === 'shotOnTargetRate') {
+      const expected = [{ type: 'shot', outcome: 'on-target' }, { type: 'shot' }];
+      let valid = true;
+      const partitions = queryResults.map((source, index) => {
+        const counts = new Map(source.groups.map((group) => [group.key, group.count]));
+        valid =
+          valid &&
+          !source.truncated &&
+          source.query.aggregate === 'by-team' &&
+          JSON.stringify(source.query.filters) === JSON.stringify(expected[index]) &&
+          source.query.timeFrom === o.timeFrom &&
+          source.query.timeTo === o.timeTo &&
+          counts.size === source.groups.length &&
+          counts.size === 2 &&
+          counts.has('home') &&
+          counts.has('away') &&
+          [...counts.values()].every((count) => Number.isSafeInteger(count) && count >= 0) &&
+          [...counts.values()].reduce((sum, count) => sum + count, 0) === source.count;
+        return counts;
+      });
+      const current = new Map();
+      for (const event of snapshot.events) {
+        if (event.time > snapshot.time || event.arrivedAt > snapshot.time) continue;
+        if (
+          !current.has(event.id) ||
+          current.get(event.id).revision < event.revision ||
+          (current.get(event.id).revision === event.revision && event.operation === 'delete')
+        )
+          current.set(event.id, event);
+      }
+      // Unknown and pending outcomes cannot be silently treated as off target.
+      valid =
+        valid &&
+        ![...current.values()].some(
+          (event) =>
+            event.operation !== 'delete' &&
+            event.type === 'shot' &&
+            event.time >= o.timeFrom &&
+            event.time <= o.timeTo &&
+            !['goal', 'saved', 'on-target', 'off-target', 'blocked'].includes(
+              actionOutcome(event)?.status,
+            ),
+        );
+      if (!valid) {
+        unavailable('The requested shot-outcome coverage is incomplete or invalid.');
+        proofs.push(proof);
+        continue;
+      }
+      const values = (o.subjects.length ? o.subjects : [null]).map((id) => {
+        const [numerator, denominator] = partitions.map((counts) =>
+          id === null ? counts.get('home') + counts.get('away') : counts.get(id),
+        );
+        return {
+          id,
+          label: id === null ? combinedRatioLabel[language] : label(id),
+          numerator,
+          denominator,
+          percentage: denominator ? (numerator * 100) / denominator : null,
+        };
+      });
+      if (values.some((value) => value.numerator > value.denominator)) {
+        unavailable('On-target subset exceeds attempts.');
+        proofs.push(proof);
+        continue;
+      }
+      proof.values = {
+        ...(o.subjects.length ? { teams: values } : { combined: values[0] }),
+        definition: 'shotsOnTarget/allAttempts',
+        unknownOutcomesExcluded: false,
+      };
+      const copy = {
+        en: (v, percent) =>
+          `${v.label}: ${percent === null ? 'percentage unavailable' : percent + '%'} (${v.numerator} of ${v.denominator} attempts on target).`,
+        es: (v, percent) =>
+          `${v.label}: ${percent === null ? 'porcentaje no disponible' : percent + '%'} (${v.numerator} de ${v.denominator} tiros a puerta).`,
+        fr: (v, percent) =>
+          `${v.label} : ${percent === null ? 'pourcentage indisponible' : percent + ' %'} (${v.numerator} tirs cadrés sur ${v.denominator}).`,
+        pt: (v, percent) =>
+          `${v.label}: ${percent === null ? 'percentagem indisponível' : percent + '%'} (${v.numerator} de ${v.denominator} remates no alvo).`,
+      };
+      claims.push({
+        kind: 'observation',
+        text:
+          window +
+          values
+            .map((value) =>
+              copy[language](
+                value,
+                value.percentage === null
+                  ? null
+                  : String(Math.round(value.percentage * 10) / 10).replace(
+                      '.',
+                      language === 'en' ? '.' : ',',
+                    ),
+              ),
+            )
+            .join(' '),
+        evidence: proof.evidence,
+      });
+    } else if (o.operator === 'ratio') {
       // Query coverage reports absent result fields. Also reject malformed enum
       // values that cannot match any of the three disjoint result partitions.
       const current = new Map();

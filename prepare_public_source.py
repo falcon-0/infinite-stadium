@@ -47,7 +47,7 @@ def prepare(source, destination, documentation_root):
     subprocess.run([sys.executable, 'package_judge.py'], cwd=destination, check=True)
     subprocess.run([sys.executable, 'verify_judge_package.py', '--report', 'artifacts/judge/public-source-cleanroom.json'], cwd=destination, check=True)
     manifest = {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}
-    return {'source': str(source), 'destination': str(destination), 'sourceFiles': len(files) + 1,
+    return {'source': str(source), 'destination': str(destination), 'sourceFiles': len(files) + (0 if Path(__file__).name in files else 1),
             'sourceHashes': manifest, 'scope': 'Allowlisted application, tests, tools and concise docs. Generated output, credentials, agent configuration and installed dependencies excluded. No Git commit, push or deployment.'}
 
 

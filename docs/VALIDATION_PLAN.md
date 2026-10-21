@@ -27,6 +27,10 @@ Freeze questions, inputs, source expectations and candidate hashes before infere
 
 ## Current evidence
 
-The M runtime passed1,310 tests with one skip and zero failures across eight gates. Original K native checks covered six selected answers; L public checks covered four, with observed3.283–5.266second responses. M preserves the backend bytes. L recorded-response desktop/mobile checks passed12/12. A real Spanish scorer/assist interaction and Spanish recap were separately inspected. See EVALUATION_EVIDENCE.json for attribution and preserved adverse results.
+The current candidate runs the eight release gates, including required browser checks, packaging and isolated archive startup. The recorded release report binds results to exact source files. Recent source cleanup and multilingual follow-up fixes also passed GitHub Linux, Windows and browser CI before merge.
 
-These results do not establish broad unfamiliar-question accuracy, native-language quality, long-term availability or comparative superiority. Further contextual-integrity questions are tested separately and may expose new failures. Real fan checks can add evidence of comprehension; they do not replace source/AI verification and are not claimed as completed here.
+Selected actual Azure checks include a French identity clarification at a later playback time: the answer retains the original question cutoff and the browser keeps playing. Fresh unfamiliar questions exposed a wrong latest-versus-longest substitution and a Spanish percentage answered with a definition. Their first failures are retained privately, separately from subsequent fixes and retests. The revised typed shot-share operation computes on-target attempts divided by all attempts, with complete query proofs, zero-denominator handling and unknown-outcome guards. Unsupported physical pass rankings must not substitute time order.
+
+These are selected developer regressions, not an overall accuracy estimate or a controlled latency benchmark. Historical long responses and network interruptions remain known limitations. Simulated reviewer scores are not organizer grades. Friend feedback exists, but no controlled fan-benefit study is claimed.
+
+An approved final video, final portal attestations and Azure credit, expiry and quota through judging still require confirmation. Private traces, credentials and generated development artifacts are excluded from the public repository.

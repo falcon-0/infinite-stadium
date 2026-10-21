@@ -741,3 +741,30 @@ test('readiness cause questions request the absent attribute rather than proving
   ])
     assert.ok(!requestedUnavailableMeasurements(q).includes('readiness'), q);
 });
+
+test('shooting percentages license shot-share arithmetic without licensing conversion or passing ratios', () => {
+  for (const question of [
+    'What percentage of all shots was on target?',
+    'De todos los tiros del partido, que porcentaje fue a puerta?',
+    'Quel pourcentage des tirs est cadre ?',
+    'Qual percentagem dos remates foi no alvo?',
+  ]) {
+    // Portuguese remates is included in the explicit shot-domain grammar.
+    assert.ok(allowedOperationMetrics({ question }).includes('shotOnTargetRate'), question);
+    assert.deepEqual(allowedOperationOperators({ question }), ['ratio']);
+  }
+  for (const question of [
+    'What percentage of shots became goals?',
+    'What percentage of passes was completed?',
+    'Were those shots on target?',
+  ])
+    assert.ok(!allowedOperationMetrics({ question }).includes('shotOnTargetRate'), question);
+  assert.equal(
+    unsupportedOperationMeasurementComponent('Who played the longest completed pass?'),
+    true,
+  );
+  assert.equal(
+    unsupportedOperationMeasurementComponent('Who played the latest completed pass?'),
+    false,
+  );
+});

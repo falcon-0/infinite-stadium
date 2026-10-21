@@ -608,6 +608,12 @@ export function buildQuestionFacts(packet) {
   // A requested measurement can be absent from the source contract even when
   // nearby action counts are complete. Never derive this absence from empty rows.
   const unavailableMeasurementCopy = {
+    passDistanceRanking: {
+      en: "I can't establish which pass was longest or shortest with the match measurements available here.",
+      es: 'No puedo determinar el pase más largo o más corto con las mediciones disponibles.',
+      fr: 'Je ne peux pas identifier la passe la plus longue ou la plus courte avec les mesures disponibles.',
+      pt: 'Não consigo determinar o passe mais longo ou mais curto com as medições disponíveis.',
+    },
     readiness: {
       en: "I can't tell whether the player was ready or whether that caused the outcome.",
       es: 'No puedo saber si el jugador estaba preparado ni si eso causó el resultado.',

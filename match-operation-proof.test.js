@@ -1106,3 +1106,62 @@ test('mixed time windows label the whole-match comparison explicitly in all supp
     assert.ok(!single.claims[0].text.startsWith(label), 'single scope keeps existing concise form');
   }
 });
+
+test('shot share computes combined counts with an all-attempt denominator, not averaged team rates', () => {
+  const question = 'What percentage of all shots was on target?';
+  const request = { kind: 'sustained', seed: 17, time: 120, language: 'es', question };
+  const result = executeOperationPlan(
+    request,
+    plan({
+      id: 'shot-share',
+      requestSpan: question,
+      operator: 'ratio',
+      metric: 'shotOnTargetRate',
+      subjects: [],
+      timeFrom: 0,
+      timeTo: 120,
+    }),
+  );
+  assert.equal(result.queryCount, 2);
+  const value = result.proofs[0].values.combined;
+  assert.equal(value.numerator, 2);
+  assert.equal(value.denominator, 5);
+  assert.equal(value.percentage, 40);
+  assert.equal(result.proofs[0].values.definition, 'shotsOnTarget/allAttempts');
+  assert.match(result.claims[0].text, /40%/);
+});
+
+test('shot share handles unknown outcomes, zero attempts and revised goals without guessing', () => {
+  const q = { ...request, question: 'What percentage of shots was on target?' };
+  const obligation = {
+    id: 'share',
+    requestSpan: q.question,
+    operator: 'ratio',
+    metric: 'shotOnTargetRate',
+    subjects: [],
+    timeFrom: 0,
+    timeTo: 20,
+  };
+  for (const result of [null, undefined]) {
+    const shot = event('pending', 10, { result });
+    if (result === undefined) delete shot.result;
+    const response = executeOperationPlan(q, plan(obligation), {
+      state: { ...base, events: [shot] },
+    });
+    assert.equal(response.proofs[0].status, 'unavailable');
+  }
+  const empty = executeOperationPlan(q, plan(obligation), { state: base });
+  assert.equal(empty.proofs[0].values.combined.percentage, null);
+  const response = executeOperationPlan(q, plan(obligation), {
+    state: {
+      ...base,
+      events: [
+        event('goal', 10, { result: false, outcome: 'off-target' }),
+        event('goal', 10, { revision: 2, arrivedAt: 15, result: true }),
+        event('blocked', 12, { outcome: 'blocked' }),
+      ],
+    },
+  });
+  assert.equal(response.proofs[0].values.combined.percentage, 50);
+  assert.equal(response.proofs[0].values.combined.denominator, 2);
+});

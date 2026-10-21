@@ -1542,6 +1542,12 @@ export function requestedSourceAttributeIssues(part, answer, packet, selection, 
   return issues;
 }
 export function canonicalPendingReception(index, answer, packet, selection) {
+  return canonicalPassReception(index, answer, packet, selection, 'pending');
+}
+export function canonicalCompletedReception(index, answer, packet, selection) {
+  return canonicalPassReception(index, answer, packet, selection, 'completed');
+}
+function canonicalPassReception(index, answer, packet, selection, outcome) {
   const proof = selection?.proofs?.[index],
     event = proof?.event,
     claim = answer.claims?.[index];
@@ -1551,9 +1557,10 @@ export function canonicalPendingReception(index, answer, packet, selection) {
     event?.kind !== 'event' ||
     event.modelGenerated !== false ||
     event.eventType !== 'pass' ||
-    event.actionOutcome?.status !== 'pending' ||
-    event.recipientStatus !== 'recorded-target' ||
-    event.recipient?.status !== 'recorded-target' ||
+    event.actionOutcome?.status !== outcome ||
+    event.recipientStatus !==
+      (outcome === 'completed' ? 'confirmed-recipient' : 'recorded-target') ||
+    event.recipient?.status !== event.recipientStatus ||
     !event.recipient.playerId ||
     claim?.kind !== 'observation'
   )
@@ -1583,7 +1590,7 @@ export function canonicalPendingReception(index, answer, packet, selection) {
     !row ||
     row.operation === 'delete' ||
     row.type !== 'pass' ||
-    row.result !== null ||
+    row.result !== (outcome === 'completed' ? true : null) ||
     row.playerId !== event.playerId ||
     row.receiverId !== event.recipient.playerId ||
     row.time !== event.time ||
@@ -2253,8 +2260,10 @@ export function reviewRequestAdequacy(
     const pendingReception =
       part.requestedAction === 'receive' &&
       part.answerForm === 'fact' &&
-      part.claimIndices.some((index) =>
-        canonicalPendingReception(index, answer, packet, canonicalFactSelection),
+      part.claimIndices.some(
+        (index) =>
+          canonicalPendingReception(index, answer, packet, canonicalFactSelection) ||
+          canonicalCompletedReception(index, answer, packet, canonicalFactSelection),
       );
     if (!nonGoalAssist && !pendingReception && !records.some(matches))
       issues.push({
@@ -2574,6 +2583,7 @@ const claimDependencyPolicy = `An interpretation must cite its match evidence di
 const knowledgePolicy = `footballKnowledge contains versioned general rules facts selected for this question. Cite these with {type:"knowledge",id:the supplied fact ID,version:footballKnowledge.version}, never event/scope references. Knowledge references support general explanations or limitations only, never match observations or interpretations. Preserve applicability conditions, alternatives and exceptions, distinguishing position/status from an offense. Review EACH supplied ruleClauses item in the context of its whole claim against ALL selected facts, not just a convenient supporting sentence. Check the logical scope of negation, "only", "always", "never", necessary versus sufficient conditions, and exclusions: an alternative route in the source contradicts an asserted exclusive condition. A later caveat does not rescue an earlier false universal. Each ruleChecks entry must identify its exact clauseId, supporting selected factIds and whether the entire contextual assertion is supported; unsupported or missing source coverage requires withholding. Source selection and valid citation IDs alone do not verify a claim. General rules never establish that something occurred in this match. Concepts outside this bounded reference may receive general explanations without source attribution. Prefer one or two claims when sufficient; omit unsolicited action details, repeated conclusions and unrelated statistics, but retain necessary rule conditions and requested distinctions.`;
 const clock = (t) =>
   `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+const orderingDimensionPolicy = `Keep the requested comparison dimension separate from chronological order. First/latest order events by time; longest/shortest require measured distance, and fastest/slowest require measured speed. A latest completed pass is not evidence of the longest pass. The current query contract orders by event time or group counts and does not compute distance/speed rankings. If the requested ranking cannot be established by the supplied tools and proofs, answer that limitation concisely rather than substituting a time-ordered action or guessing a recipient of an unestablished winner. Reviewers must reject that substitution even if the event, actor and recipient are individually correct.`;
 const premisePolicy = `The answer schema starts with premiseCheck. Fill this INTERNAL field before writing claims: questionAssumption describes the action or relationship the question assumes; recordedAction identifies what the supplied evidence actually establishes (including its actor); conclusion is supported, contradicted, unknown, or not-applicable. It is never displayed to the fan. When contradicted, claims correct the assumption; do not explain why the assumed action occurred. When unknown, do not invent a reason. Before writing, reconcile the question's premise with the actors in the supplied actions. A question is NOT evidence that its named player took a shot, missed, refused a pass, or caused an error. If the latest shot belongs to someone else, answer with that correction and the named player's actual recorded action. Never infer why an action did not occur from absence of an event. Chronology is not motivation: already passed earlier cannot explain why someone did not pass later. Do not write because, indicating, or showing unless that relationship is supported, rather than merely the component events. For an unrecorded reason, say briefly that you cannot tell why and give the useful recorded outcome; avoid listing unavailable measurements. A correction needs only one or two sentences. Example with fictional evidence: question "Why did Alex shoot?", evidence Ben shot and Alex passed to Ben: answer "That was Ben’s shot. Alex supplied the pass." End there. Do NOT append "why Alex shot is unknown" or list intentions/options; that reintroduces the disproved premise. This is an example of reasoning, not a fixed response. A question about forcing a turnover may be answered by identifying the recovery while saying its cause is unclear. The reviewer must reject a causal explanation based solely on prior actions or absent events, even if every action citation is correct.`;
 const assessmentPolicy = `Evaluative football questions deserve useful qualified judgment. For a best-player/standout assessment, compare received goals, explicit assists, shots and recoveries as relevant. Lead with a provisional pick (or no clear standout) and its strongest recorded reason, then at most one brief comparison/limitation: normally 2-3 sentences total. Never build a four-paragraph player report unless asked. An early thin record can support a tentative choice; lack of an official award is not a refusal reason. Label the pick as your assessment so far, not an official/full-match verdict. Do not invent player ratings, minutes, tackles, saves or intention. A recorded recovery is not automatically a key intervention.`;
 // Constrain the provider's wire format as well as validating its meaning locally.
@@ -5527,7 +5537,10 @@ export async function answerMatchQuestionAI(
     );
     messages = messages.map((message) =>
       message.role === 'system'
-        ? { ...message, content: message.content + '\n' + viewerProfilePolicy }
+        ? {
+            ...message,
+            content: message.content + '\n' + viewerProfilePolicy + '\n' + orderingDimensionPolicy,
+          }
         : message,
     );
     if (!planningStage && !ruleSelectionStage && !generalRoute)
@@ -5674,7 +5687,7 @@ export async function answerMatchQuestionAI(
             'Only the requested subject sets are permitted. Difference requires two distinct IDs from one licensed pair; orderedEndpoints uses [] for the whole match or one explicitly requested entity; ratio uses the requested one or two distinct team IDs.',
         };
         properties.metric.description =
-          'attempts means ALL shots, including goals, saved, blocked, off-target, unknown and pending outcomes. shotsOnTarget means ONLY confirmed goals and saved shots; it excludes blocked, off-target and pending attempts. completedPasses means confirmed completed passes; goals means confirmed goals; recoveries means classified ball wins, excluding segment-start initial control and unknown recovery classifications; creditedAssists means explicit assist credit. passCompletionRate means completed/(completed+failed) passes, pending excluded and disclosed; undefined when no resolved passes.';
+          'attempts means ALL shots, including goals, saved, blocked, off-target, unknown and pending outcomes. shotsOnTarget means ONLY confirmed goals and saved shots; it excludes blocked, off-target and pending attempts. completedPasses means confirmed completed passes; goals means confirmed goals; recoveries means classified ball wins, excluding segment-start initial control and unknown recovery classifications; creditedAssists means explicit assist credit. passCompletionRate means completed/(completed+failed) passes, pending excluded and disclosed; undefined when no resolved passes. shotOnTargetRate means shotsOnTarget/allAttempts as a percentage, using all attempts as the denominator; exact rate unavailable when any requested shot outcome is unknown or pending. A percentage asks for this arithmetic, not a shot category definition.';
         properties.metric.enum = permissions.metrics;
         if (permissions.window?.kind === 'full') {
           properties.timeFrom = { type: 'number', enum: [permissions.window.from] };
@@ -6602,9 +6615,19 @@ export async function answerMatchQuestionAI(
       }
       if (requiredMeasurementIds.length) {
         const required = [...requiredMixedCountIds, ...requiredMeasurementIds],
-          otherFactsNeeded = requestComponents(input.question).some(
-            (span) => !requestedUnavailableMeasurements(span).length && !explicitCountDemand(span),
-          );
+          // A recipient of an unestablished distance winner cannot be supplied by
+          // substituting the latest pass. Retain independently required counts,
+          // but do not add an event as if it were the unknown ranked winner.
+          otherFactsNeeded =
+            !requiredMeasurementIds.some((id) =>
+              matchFactManifest.facts.some(
+                (fact) => fact.id === id && fact.proof.dimension === 'passDistanceRanking',
+              ),
+            ) &&
+            requestComponents(input.question).some(
+              (span) =>
+                !requestedUnavailableMeasurements(span).length && !explicitCountDemand(span),
+            );
         if (required.length <= 4)
           schema.properties.composition.anyOf = [
             strictObject({
