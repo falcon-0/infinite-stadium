@@ -4,7 +4,7 @@
 
 Use Node.js 24 and Python 3.9+. `node server.js` starts the replay without credentials. `npm ci --ignore-scripts` installs the pinned development formatter; the application has no runtime npm dependencies. Azure settings belong in private `.env.azure` configuration.
 
-Run `npm run format` after JavaScript changes and `npm run format:check` before a commit. Tests sit beside their modules. Start with the affected test, then run `npm run verify:release` for offline tests, data checks, browser checks and isolated Python packaging. See VALIDATION_PLAN.md for browser configuration.
+Git attributes keep text line endings consistent across Windows and Linux. Run `npm run format` after JavaScript changes and `npm run format:check` before a commit. Tests sit beside their modules. Start with the affected test, then run `npm run verify:release` for offline tests, data checks, browser checks and isolated Python packaging. See VALIDATION_PLAN.md for browser configuration.
 
 ## Follow a question
 

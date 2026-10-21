@@ -5210,11 +5210,25 @@ export async function answerMatchQuestionAI(
   const state = matchState(input);
   const clarified =
     !intentResolutionDepth &&
-    resolvePlayerClarification(input, state.frames.at(-1)?.players || [], state.metadata.teams);
+    resolvePlayerClarification(
+      input,
+      (input.clarification
+        ? matchState({ ...input, time: input.clarification.time })
+        : state
+      ).frames.at(-1)?.players || [],
+      state.metadata.teams,
+    );
   if (clarified) {
     const { clarification, ...rest } = input;
     const result = await answerMatchQuestionAI(
-      { ...rest, question: clarified.question },
+      {
+        ...rest,
+        question: clarified.question,
+        time: clarified.originalObservedAt,
+        conversation: (rest.conversation || []).filter(
+          (turn) => turn.time <= clarified.originalObservedAt,
+        ),
+      },
       { config, fetcher, signal, canRepair, intentResolutionDepth: 1, maxModelCalls },
     );
     const output = {

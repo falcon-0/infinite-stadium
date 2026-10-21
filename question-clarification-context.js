@@ -56,6 +56,7 @@ export function resolvePlayerClarification(input, roster, teams) {
         playerName: player.name,
         originalQuestion: pending.question,
         clarifiedAt: input.time,
+        originalObservedAt: pending.time,
       });
   }
   return choices.length === 1 ? choices[0] : null;

@@ -19,6 +19,7 @@ test('a roster-backed selection restores the pending question, not a player prof
   assert.equal(value.playerId, 'a');
   assert.match(value.question, /passe ratée de M\. Costa/);
   assert.equal(value.clarifiedAt, 70);
+  assert.equal(value.originalObservedAt, 69);
   validateMatchQuestionInput(input);
 });
 test('new questions, guesses, duplicate choices and future context cannot overwrite intent', () => {

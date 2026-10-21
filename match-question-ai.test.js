@@ -20177,6 +20177,7 @@ test('a source identity clarification restores the original cause question witho
   const mock = sequenceTransport([
     (packet) => {
       assert.match(packet.question, /Did M\. Costa lose/);
+      assert.equal(packet.observedAt, 69, 'clarification resumes the original question pin');
       return {
         requestedSourceAttributes: null,
         answerFocus: 'event-actor',
@@ -20243,6 +20244,8 @@ test('a source identity clarification restores the original cause question witho
   assert.equal(answer.execution.modelCalls, 3);
   assert.equal(answer.question, input.question);
   assert.equal(answer.questionResolution.kind, 'source-lineup-clarification');
+  assert.equal(answer.observedAt, 69);
+  assert.equal(answer.questionResolution.clarifiedAt, 70);
   assert.match(answer.answer, /Cole/);
   assert.match(answer.answer, /doesn't establish/);
 });
