@@ -249,3 +249,75 @@ test('prose-normalization audit indices follow canonical pruning without rewriti
     answer.proseNormalizations[0].originalText,
   );
 });
+
+test('a proved measurement boundary does not keep an unrelated latest action or remove the requested scorer', () => {
+  const { answer, review } = fixture();
+  answer.claims = [
+    { kind: 'limitation', text: 'Distance ranking is unavailable.', evidence: [] },
+    fact('latest-pass'),
+    fact('goal'),
+  ];
+  const ids = ['boundary', 'latest-pass', 'goal'];
+  answer.canonicalFactSelection = {
+    selectedFactIds: ids,
+    requestedFactIds: ids,
+    originalToSelectedIndex: [0, 1, 2],
+    proofs: ids.map((factId) =>
+      factId === 'boundary'
+        ? {
+            factId,
+            kind: 'source-measurement-limitation',
+            dimension: 'passDistanceRanking',
+            requestSpan: 'Longest pass?',
+            basis: 'trusted-event-schema',
+            modelGenerated: false,
+          }
+        : { factId, kind: 'event', eventId: factId },
+    ),
+    dependencyMappings: [],
+  };
+  answer.claimProvenance = ids.map((factId, claimIndex) => ({
+    claimIndex,
+    factId,
+    source: 'verified-query-fact',
+    modelGenerated: false,
+  }));
+  review.requestCheck.coverage = [
+    {
+      requestSpan: 'Longest pass?',
+      claimIndices: [0, 1],
+      answerForm: 'unavailable-measurement',
+      requestedAction: 'pass',
+      temporalRelation: 'none',
+    },
+    {
+      requestSpan: 'Goal scorer?',
+      claimIndices: [2],
+      answerForm: 'fact',
+      requestedAction: 'shot',
+      temporalRelation: 'none',
+    },
+  ];
+  const before = structuredClone({ answer, review });
+  const result = pruneUncoveredCanonicalFacts(answer, review);
+  assert.equal(result.pruned, true);
+  assert.deepEqual(result.answer.claims, [answer.claims[0], answer.claims[2]]);
+  assert.deepEqual(
+    result.review.requestCheck.coverage.map((part) => part.claimIndices),
+    [[0], [1]],
+  );
+  assert.deepEqual({ answer, review }, before);
+  const needed = structuredClone(review);
+  needed.requestCheck.coverage.push({
+    requestSpan: 'Latest pass?',
+    claimIndices: [1],
+    answerForm: 'fact',
+    requestedAction: 'pass',
+    temporalRelation: 'none',
+  });
+  assert.equal(
+    pruneUncoveredCanonicalFacts(answer, needed).pruned,
+    false,
+    'an independently requested pass remains',
+  );
+});

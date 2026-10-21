@@ -1907,6 +1907,7 @@ export function buildQuestionFacts(packet) {
     }
     add(`${prefix}: ${endpoint.text}`, [endpoint.ref, source.scopeReference], {
       kind: 'ordered-event',
+      displayQualifier: prefix,
       order,
       metric: m,
       subjectId: subject,
@@ -1918,6 +1919,39 @@ export function buildQuestionFacts(packet) {
       event: endpoint.proof,
       modelGenerated: false,
     });
+  }
+  // A unique ordered saved-shot witness can share one source-built sentence
+  // with its explicitly linked keeper collection. Preserve the order/window
+  // proof so deduplication never drops a requested first/latest qualifier.
+  for (const hold of [...facts].filter((fact) => fact.proof.kind === 'linked-goalkeeper-hold')) {
+    const candidates = facts.filter(
+      (fact) =>
+        fact.proof.kind === 'ordered-event' &&
+        fact.proof.modelGenerated === false &&
+        fact.proof.metric === 'savedShots' &&
+        fact.proof.event?.eventId === hold.proof.shotId &&
+        fact.proof.event?.revision === hold.proof.shotRevision &&
+        fact.proof.event?.playerId === hold.proof.shooterId &&
+        fact.proof.event?.time === hold.proof.shotTime &&
+        fact.proof.event?.actionOutcome?.status === 'saved' &&
+        typeof fact.proof.displayQualifier === 'string',
+    );
+    if (candidates.length !== 1) continue;
+    const ordered = candidates[0];
+    const before = facts.length;
+    add(
+      `${ordered.proof.displayQualifier}: ${hold.claim.text}`,
+      [
+        ...new Map(
+          [...hold.claim.evidence, ...ordered.claim.evidence].map((ref) => [key(ref), ref]),
+        ).values(),
+      ],
+      {
+        ...hold.proof,
+        orderedShot: structuredClone(ordered.proof),
+      },
+    );
+    if (facts.length > before) facts.splice(facts.indexOf(hold), 1);
   }
   const requestedRefs = new Set((packet.requestedEvidence || []).map((q) => key(q.scopeReference)));
   const rank = (fact) =>
@@ -1997,6 +2031,20 @@ export function selectQuestionFacts(manifest, ids) {
   // This never chooses an unselected composite or compares natural-language text.
   const covers = (composite, atom) => {
     const proof = composite.proof;
+    if (
+      proof?.kind === 'linked-goalkeeper-hold' &&
+      proof.modelGenerated === false &&
+      proof.orderedShot?.kind === 'ordered-event' &&
+      atom.proof?.kind === 'ordered-event' &&
+      json(proof.orderedShot) === json(atom.proof) &&
+      proof.orderedShot.event?.eventId === proof.shotId &&
+      proof.orderedShot.event?.revision === proof.shotRevision &&
+      proof.orderedShot.event?.playerId === proof.shooterId &&
+      proof.orderedShot.event?.actionOutcome?.status === 'saved'
+    )
+      return atom.claim.evidence.every((ref) =>
+        composite.claim.evidence.some((other) => key(ref) === key(other)),
+      );
     if (proof?.kind === 'player-count-ranking' && atom.proof?.kind === 'count') {
       const a = atom.proof,
         groups = proof.groups,

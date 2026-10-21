@@ -83,7 +83,13 @@ export function integratedFeed(kind = 'central', seed = 17) {
     endY: (player.y / 68) * 100,
     reason: 'Shot location corrected with its positional sample.',
   });
-  return { events, frames: stream.frames };
+  // Use the same authored identity labels in legacy event and roster records.
+  // Names must not disappear from roster frames while remaining on their events.
+  const frames = stream.frames.map((frame) => ({
+    ...frame,
+    players: frame.players.map((player) => ({ ...player, name: name(player.id) })),
+  }));
+  return { events, frames };
 }
 
 function metric(anchor, kind, value, unit, formula, inputs, details = {}) {
