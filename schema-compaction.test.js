@@ -104,3 +104,44 @@ test('existing definitions and repeated nested structures retain acyclic referen
   const { $defs, ...plain } = source;
   assert.deepEqual(resolve(compact), plain);
 });
+
+test('nested factoring inlines generated single-use definitions and preserves caller definitions', () => {
+  const inner = {
+    type: 'string',
+    description: 'Bounded description '.repeat(15),
+    enum: ['home', 'away'],
+  };
+  const outer = {
+    type: 'object',
+    properties: { name: inner },
+    required: ['name'],
+    additionalProperties: false,
+  };
+  const input = {
+    type: 'object',
+    properties: { a: outer, b: structuredClone(outer) },
+    $defs: { caller: { type: 'string', enum: ['retained'] } },
+  };
+  const compact = compactRepeatedSchema(input);
+  assert.deepEqual(compact.$defs.caller, input.$defs.caller);
+  assert.equal(
+    Object.keys(compact.$defs).length,
+    2,
+    'nested generated one-use definition is inlined',
+  );
+  const expand = (value) =>
+    Array.isArray(value)
+      ? value.map(expand)
+      : value && typeof value === 'object'
+        ? value.$ref
+          ? expand(compact.$defs[value.$ref.slice(8)])
+          : Object.fromEntries(
+              Object.entries(value)
+                .filter(([key]) => key !== '$defs')
+                .map(([key, child]) => [key, expand(child)]),
+            )
+        : value;
+  const { $defs, ...original } = input;
+  assert.deepEqual(expand(compact), original);
+  assert.ok(JSON.stringify(compact).length < JSON.stringify(input).length);
+});

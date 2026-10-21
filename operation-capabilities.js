@@ -2,7 +2,7 @@
 // A model still selects the operation and its scope; review checks relevance.
 // Unsupported paraphrases keep the ordinary evidence/query route available.
 export const operationMetricPolicyDescription =
-  'attempts means ALL shots, including blocked, off-target and pending attempts; recoveries means explicitly classified ball wins, excluding initial segment possession and unknown recovery kinds; raw provider recovery records are a separate query concept. Restrictive metrics require an explicit matching metric concept in the current question: completedPasses (completion/success), goals (goals/scoring), shotsOnTarget (a nominal on-target subset), creditedAssists (explicit assist credit). A question asking whether one shot was on target does not request an on-target-only timeline. Never substitute a restrictive metric for an unqualified one. History can supply a metric topic only for a deictic follow-up with no explicit current metric noun. Missing permission means use the ordinary evidence/query route, not a renamed or broadened metric. For passing-accuracy ratio, subjects [] denotes one combined rate from summed completed and failed passes across both teams; one or two team IDs denote separate rates. Never average team percentages or treat a combined rate as two team results. This conservative EN/ES/FR/PT lexical filter license is not universal natural-language entailment.';
+  'attempts means ALL shots, including blocked, off-target and pending attempts; recoveries means explicitly classified ball wins, excluding initial segment possession and unknown recovery kinds; raw provider recovery records are a separate query concept. Restrictive metrics require an explicit matching metric concept in the current question: completedPasses (completion/success), goals (goals/scoring), shotsOnTarget (a nominal on-target subset), creditedAssists (explicit assist credit). A question asking whether one shot was on target does not request an on-target-only timeline. Never substitute a restrictive metric for an unqualified one. History can supply a metric topic only for a deictic follow-up with no explicit current metric noun. Missing permission means use the ordinary evidence/query route, not a renamed or broadened metric. shotOnTargetRate is the share of all attempts that were on target; use its ratio operator for an explicit shooting percentage, never a category definition. Unknown shot outcomes make the exact rate unavailable. For passing-accuracy ratio, subjects [] denotes one combined rate from summed completed and failed passes across both teams; one or two team IDs denote separate rates. Never average team percentages or treat a combined rate as two team results. This conservative EN/ES/FR/PT lexical filter license is not universal natural-language entailment.';
 
 const normalize = (value) =>
   typeof value === 'string'
@@ -68,7 +68,7 @@ function nominalOnTarget(text) {
   if (broadens(text)) return false;
   // These expressions describe a filtered set. Merely asking whether a given
   // shot had this outcome must retain the broader attempt inventory.
-  const nouns = 'shots?|attempts?|tirs?|tiros?|chutes?';
+  const nouns = 'shots?|attempts?|tirs?|tiros?|chutes?|remates?';
   const patterns = [
     `(?:shots?|attempts?) on target`,
     `on target (?:shots?|attempts?)`,
@@ -129,6 +129,15 @@ export function requestedUnavailableMeasurements(text) {
   // The event capability contract explicitly lacks measured possession, pressing
   // and xG. An unfamiliar metric alone is NOT proof that it is unavailable.
   const found = [];
+  if (
+    clauses.some(
+      (clause) =>
+        /\b(?:longest|shortest|plus long|plus court|mas largo|mas corto|mais longo|mais curto)\b/u.test(
+          clause,
+        ) && /\b(?:pass(?:es)?|pases|passe)\b/u.test(clause),
+    )
+  )
+    found.push('passDistanceRanking');
   // Readiness is an explicitly unrecorded player attribute, not something a
   // failed pass or an interception can establish. Keep causal/blame questions
   // distinct from known outcomes and identities in their other components.
@@ -222,6 +231,13 @@ export function allowedOperationMetrics(input = {}) {
   )
     allowed.push('creditedAssists');
   if (!restrictedBlocked && passingRateRequested(topic)) allowed.push('passCompletionRate');
+  if (
+    !restrictedBlocked &&
+    rateConcept.test(topic) &&
+    /\b(?:shots?|attempts?|tirs?|tiros?|chutes?|remates?)\b/u.test(topic) &&
+    /\b(?:on target|a puerta|cadre|cadres|no alvo|a baliza)\b/u.test(topic)
+  )
+    allowed.push('shotOnTargetRate');
   return allowed;
 }
 
@@ -320,7 +336,9 @@ export function allowedOperationSubjects(input = {}) {
 export function allowedOperationOperators(input = {}) {
   const question = normalize(input?.question),
     topic = topicFor(input);
-  const ratio = allowedTypedOperationMetrics(input).includes('passCompletionRate');
+  const ratio = allowedTypedOperationMetrics(input).some((metric) =>
+    ['passCompletionRate', 'shotOnTargetRate'].includes(metric),
+  );
   // These require different tools than a count difference or two endpoints.
   if (
     new RegExp(
@@ -340,7 +358,7 @@ export function allowedOperationOperators(input = {}) {
   )
     return [];
   const supportedTopic =
-    /\b(?:shots?|attempts?|tirs?|tiros?|chutes?|tentativ(?:es?|as?)|intentos?|recover(?:y|ies)|recupera\w*|goals?|goles?|gols?|buts|assists?|asistencias?|assistencias?|pass(?:es)?|passes?|pases)\b/u.test(
+    /\b(?:shots?|attempts?|tirs?|tiros?|chutes?|remates?|tentativ(?:es?|as?)|intentos?|recover(?:y|ies)|recupera\w*|goals?|goles?|gols?|buts|assists?|asistencias?|assistencias?|pass(?:es)?|passes?|pases)\b/u.test(
       topic,
     );
   if (!supportedTopic || !allowedTypedOperationMetrics(input).length) return [];
@@ -361,15 +379,18 @@ export function allowedTypedOperationMetrics(input = {}) {
   const topic = topicFor(input),
     licensed = allowedOperationMetrics(input);
   const domains = {
-    attempts: /\b(?:shots?|attempts?|tirs?|tiros?|chutes?|tentativ(?:es?|as?)|intentos?)\b/u,
+    attempts:
+      /\b(?:shots?|attempts?|tirs?|tiros?|chutes?|remates?|tentativ(?:es?|as?)|intentos?)\b/u,
     recoveries: /\b(?:recover(?:y|ies)|recupera\w*)\b/u,
     completedPasses: /\b(?:pass(?:es)?|passes?|pases|completion\w*)\b/u,
     goals: /\b(?:goals?|goles?|gols?|buts|scor\w*|marqu\w*|marcou|marcaron)\b/u,
-    shotsOnTarget: /\b(?:shots?|attempts?|tirs?|tiros?|chutes?)\b/u,
+    shotsOnTarget: /\b(?:shots?|attempts?|tirs?|tiros?|chutes?|remates?)\b/u,
     creditedAssists: /\b(?:assists?|assisted|asistencias?|assistencias?|decisiv\w*)\b/u,
     passCompletionRate: /\b(?:pass(?:ing|es)?|passes?|pases)\b/u,
+    shotOnTargetRate: /\b(?:shots?|attempts?|tirs?|tiros?|chutes?|remates?)\b/u,
   };
   if (licensed.includes('passCompletionRate')) return ['passCompletionRate'];
+  if (licensed.includes('shotOnTargetRate')) return ['shotOnTargetRate'];
   return licensed.filter(
     (metric) =>
       domains[metric].test(topic) && !(metric === 'attempts' && licensed.includes('shotsOnTarget')),

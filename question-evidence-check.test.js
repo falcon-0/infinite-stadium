@@ -2936,6 +2936,7 @@ test('measurement absence inventory names only explicit unrecorded dimensions', 
     'pressing',
     'xG',
     'readiness',
+    'passDistanceRanking',
   ]);
   for (const recorded of ['passCompletionRate', 'attempts', 'recoveries'])
     assert.ok(!capabilities.unavailableMeasurements.includes(recorded));
