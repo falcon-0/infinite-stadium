@@ -11,6 +11,8 @@ import {
   inventoryDependencyCovers,
   canonicalPendingReception,
   canonicalCompletedReception,
+  asksActualMatchOccurrence,
+  independentRankingContextRequested,
   ordinalDependentScope,
   sourceAttributeReviewBudget,
   requestedSourceAttributeIssues,
@@ -20387,4 +20389,39 @@ test('unknown distance ranking cannot substitute a latest pass or its recipient'
   assert.match(result.answer, /can't establish/);
   assert.doesNotMatch(result.answer, /Latest|Cole|Reed|01:50/);
   assert.equal(result.execution.modelCalls, 3);
+});
+
+test('actual match occurrences cannot use a pure shot-category definition route', () => {
+  for (const question of [
+    'Has either keeper actually made a save, or did those shots just miss?',
+    'Did those shots miss?',
+    'Have the keepers saved any shots?',
+    'Ha parado el portero algun tiro?',
+    'Houve remates defendidos?',
+  ])
+    assert.equal(asksActualMatchOccurrence(question), true, question);
+  for (const question of [
+    'Is a blocked shot counted as a save?',
+    'What does a shot on target mean?',
+    'Explain the definition of a saved shot.',
+  ])
+    assert.equal(asksActualMatchOccurrence(question), false, question);
+});
+
+test('unknown ranked pass keeps independent goal identities but not a guessed recipient', () => {
+  assert.equal(
+    independentRankingContextRequested('Who completed the longest pass, and who scored the goal?'),
+    true,
+  );
+  assert.equal(
+    independentRankingContextRequested('Who completed the longest pass, and who received it?'),
+    false,
+  );
+  assert.equal(
+    independentRankingContextRequested(
+      'Who completed the longest pass, and how many passes were completed?',
+    ),
+    false,
+    'known counts use their separately required canonical facts',
+  );
 });

@@ -1165,3 +1165,29 @@ test('shot share handles unknown outcomes, zero attempts and revised goals witho
   assert.equal(response.proofs[0].values.combined.percentage, 50);
   assert.equal(response.proofs[0].values.combined.denominator, 2);
 });
+
+test('a team shot percentage is unaffected by unknown opponent outcomes', () => {
+  const question = 'What percentage of home shots was on target?';
+  const request = { kind: 'test', seed: 1, time: 20, language: 'en', question };
+  const obligation = {
+    id: 'team-share',
+    requestSpan: question,
+    operator: 'ratio',
+    metric: 'shotOnTargetRate',
+    subjects: ['home'],
+    timeFrom: 0,
+    timeTo: 20,
+  };
+  const state = {
+    ...base,
+    events: [
+      event('home-save', 10),
+      event('away-pending', 12, { team: 'away', playerId: 'a1', result: null }),
+    ],
+  };
+  const result = executeOperationPlan(request, plan(obligation), { state });
+  assert.equal(result.proofs[0].status, 'proved');
+  assert.equal(result.proofs[0].values.teams[0].percentage, 100);
+  const combined = executeOperationPlan(request, plan({ ...obligation, subjects: [] }), { state });
+  assert.equal(combined.proofs[0].status, 'unavailable');
+});

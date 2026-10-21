@@ -515,6 +515,7 @@ export function executeOperationPlan(input, plan, { state, stateFactory = matchS
           (event) =>
             event.operation !== 'delete' &&
             event.type === 'shot' &&
+            (!o.subjects.length || o.subjects.includes(event.team)) &&
             event.time >= o.timeFrom &&
             event.time <= o.timeTo &&
             !['goal', 'saved', 'on-target', 'off-target', 'blocked'].includes(

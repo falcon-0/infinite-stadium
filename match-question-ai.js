@@ -1541,6 +1541,47 @@ export function requestedSourceAttributeIssues(part, answer, packet, selection, 
   }
   return issues;
 }
+// A bounded grammar guard keeps actual match occurrences out of the optimized
+// category-definition route. It selects no answer, actor, event or statistic.
+export function independentRankingContextRequested(question) {
+  return requestComponents(question).some((span) => {
+    if (requestedUnavailableMeasurements(span).length || explicitCountDemand(span)) return false;
+    const text = String(span).normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
+    // Explicit different actions are independent of an unidentified pass winner.
+    if (
+      /\b(?:goals?|scor\w*|buts?|goles?|gols?|shots?|tirs?|tiros?|saves?|interceptions?|tackles?)\b/u.test(
+        text,
+      )
+    )
+      return true;
+    // Deictic recipient/time/location clauses retain the unknown ranked referent.
+    return !/\b(?:it|that|this|those|them|cela|celui|celle|le|la|lo|eso|ese|isso|esse|ele|ela)\b/u.test(
+      text,
+    );
+  });
+}
+
+export function asksActualMatchOccurrence(question) {
+  const text = String(question || '')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase();
+  if (
+    /\b(?:mean|meaning|definition|defined|count(?:ed|s)? as|considered|signifi\w*|defini\w*|considere\w*|se considera)\b/u.test(
+      text,
+    )
+  )
+    return false;
+  return (
+    /\b(?:keeper|goalkeeper|portero|gardien|goleiro|shot|shots|tir|tirs|tiro|tiros|remate|remates)\b/u.test(
+      text,
+    ) &&
+    /(?:^|[?!;,]\s*)(?:has|have|did|was|were|ha|han|hanno|a t il|ont ils|est ce que|houve|teve)\b/u.test(
+      text,
+    )
+  );
+}
+
 export function canonicalPendingReception(index, answer, packet, selection) {
   return canonicalPassReception(index, answer, packet, selection, 'pending');
 }
@@ -5655,6 +5696,10 @@ export async function answerMatchQuestionAI(
         schema.properties.explanationTarget.enum = schema.properties.explanationTarget.enum.filter(
           (value) => value !== 'decision-rationale',
         );
+      if (asksActualMatchOccurrence(input.question))
+        schema.properties.explanationTarget.enum = schema.properties.explanationTarget.enum.filter(
+          (value) => value !== 'statistic-definition',
+        );
       if (stage === 'planning-repair' && forbidPureDefinition)
         schema.properties.explanationTarget.enum = schema.properties.explanationTarget.enum.filter(
           (value) => value !== 'statistic-definition',
@@ -6618,16 +6663,16 @@ export async function answerMatchQuestionAI(
           // A recipient of an unestablished distance winner cannot be supplied by
           // substituting the latest pass. Retain independently required counts,
           // but do not add an event as if it were the unknown ranked winner.
-          otherFactsNeeded =
-            !requiredMeasurementIds.some((id) =>
-              matchFactManifest.facts.some(
-                (fact) => fact.id === id && fact.proof.dimension === 'passDistanceRanking',
-              ),
-            ) &&
-            requestComponents(input.question).some(
-              (span) =>
-                !requestedUnavailableMeasurements(span).length && !explicitCountDemand(span),
-            );
+          otherFactsNeeded = requiredMeasurementIds.some((id) =>
+            matchFactManifest.facts.some(
+              (fact) => fact.id === id && fact.proof.dimension === 'passDistanceRanking',
+            ),
+          )
+            ? independentRankingContextRequested(input.question)
+            : requestComponents(input.question).some(
+                (span) =>
+                  !requestedUnavailableMeasurements(span).length && !explicitCountDemand(span),
+              );
         if (required.length <= 4)
           schema.properties.composition.anyOf = [
             strictObject({
