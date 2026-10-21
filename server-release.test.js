@@ -48,3 +48,24 @@ test('malformed absolute request targets receive 400 without terminating the ser
  const healthy=await fetch(`http://127.0.0.1:${port}/api/health`);
  assert.equal(healthy.status,200);assert.equal((await healthy.json()).healthy,true);assert.equal(providerCalls,0);
 });
+
+
+test('JSON responses expose only finite application duration and preserve ordinary bodies',async t=>{
+ const server=createServer({env:{}});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+ const base=`http://127.0.0.1:${server.address().port}`;
+ for(const [path,options,status,body] of [
+  ['/api/health',{},200,{healthy:true,synthetic:true}],
+  ['/api/match/question',{method:'POST'},415,{error:'Use application/json.'}]
+ ]){
+  const response=await fetch(base+path,options);
+  assert.equal(response.status,status);
+  assert.deepEqual(await response.json(),body);
+  const timing=response.headers.get('server-timing');
+  assert.match(timing,/^app;dur=\d+\.\d{3}$/);
+  const duration=Number(timing.slice('app;dur='.length));
+  assert.ok(Number.isFinite(duration)&&duration>=0);
+  assert.equal(response.headers.get('cache-control'),'no-store');
+ }
+});

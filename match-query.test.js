@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {executeMatchQuery} from './match-query.js';
 import {matchState} from './match-stream.js';
 import {watchStats} from './watch-stats.js';
+import {buildQuestionFacts} from './question-facts.js';
 const input={kind:'sustained',seed:17,time:96};
 
 test('ball-win queries exclude starting control and preserve unknown classification coverage',()=>{
@@ -330,4 +331,48 @@ test('resolution uses only received identities and binds changed candidates into
  assert.equal(received.entityResolution.player.status,'resolved');
  assert.equal(received.count,0);assert.equal(future.count,0);
  assert.notEqual(received.scopeReference.id,future.scopeReference.id);
+});
+
+
+test('unknown linked-shot outcomes mark incomplete coverage and suppress canonical collection totals',()=>{
+ const input={kind:'counter',seed:2063,time:90},base=matchState(input);
+ const query={filters:{type:'recovery',player:'home-1',recoveryKind:'goalkeeper-hold',linkedShotOutcome:'saved'},aggregate:'count',timeFrom:0,timeTo:90};
+ for(const change of [s=>delete s.result,s=>s.result='invalid',s=>s.result=0,s=>{s.result=false;s.outcome='unknown';},s=>{s.result=false;delete s.outcome;}]){
+  const state=structuredClone(base),shot=state.events.find(e=>e.id.endsWith('shot-26'));change(shot);
+  const run=q=>executeMatchQuery(input,q,{stateFactory:()=>state}),source=run(query);assert.equal(source.count,1);assert.equal(source.scope.missingFields.linkedShotOutcome,1);
+  const onTarget=run({...query,filters:{...query.filters,linkedShotOutcome:'on-target'}});assert.equal(onTarget.count,1);assert.equal(onTarget.scope.missingFields.linkedShotOutcome,1);
+  const facts=buildQuestionFacts({observedAt:90,responseLanguage:'en',teams:state.metadata.teams,roster:state.frames.at(-1).players,requestedEvidence:[source]});assert.equal(facts.facts.some(f=>f.proof.kind==='count'),false,'Known remaining match is not a complete total when another linked outcome is unknown');
+ }
+});
+
+test('canonical linked outcome statuses retain exact and on-target semantics',()=>{
+ const input={kind:'counter',seed:2063,time:90},base=matchState(input),query={filters:{type:'recovery',player:'home-1',recoveryKind:'goalkeeper-hold'},aggregate:'count',timeFrom:0,timeTo:90};
+ for(const [status,result,outcome]of [['goal',true,undefined],['pending',null,undefined],['saved',false,'saved'],['blocked',false,'blocked'],['off-target',false,'off-target'],['on-target',false,'on-target']]){
+  const state=structuredClone(base);for(const shot of state.events.filter(e=>['comparison-counter-2063-shot-26','comparison-counter-2063-shot-86'].includes(e.id))){shot.result=result;shot.outcome=outcome;}
+  const run=filter=>executeMatchQuery(input,{...query,filters:{...query.filters,linkedShotOutcome:filter}},{stateFactory:()=>state});
+  const exact=run(status);assert.equal(exact.count,2,status);assert.equal(exact.scope.missingFields.linkedShotOutcome,0,status);assert.equal(run('on-target').count,['goal','saved','on-target'].includes(status)?2:0,status);
+ }
+});
+
+
+test('malformed pass results cannot erase a possible tied leader from a complete ranking',()=>{
+ const input={kind:'quiet',seed:2063,time:42},base=matchState(input),query={filters:{type:'pass',result:true},aggregate:'by-player',groupOrder:'count-desc',limit:20,timeFrom:0,timeTo:42};
+ for(const value of ['unknown','false',0,1,{},undefined]){
+  const state=structuredClone(base),cole=state.events.find(e=>e.type==='pass'&&e.playerId==='home-7'&&e.result===true);cole.result=value;
+  const source=executeMatchQuery(input,query,{stateFactory:()=>state});assert.equal(source.count,2);assert.equal(source.scope.missingFields.result,1);assert.equal(source.truncated,false);
+  const facts=buildQuestionFacts({observedAt:42,responseLanguage:'en',teams:state.metadata.teams,roster:state.frames.at(-1).players,requestedEvidence:[source]});assert.equal(facts.facts.some(f=>f.proof.kind==='player-count-ranking'||f.proof.kind==='count'),false,'Unknown Cole outcome prevents claiming the other two are all leaders');
+ }
+});
+
+test('shot outcome filters mark malformed classifications missing without aliasing known states',()=>{
+ const input={kind:'counter',seed:2063,time:90},base=matchState(input),query={filters:{type:'shot',outcome:'saved'},aggregate:'count',timeFrom:0,timeTo:90};
+ for(const change of [s=>delete s.result,s=>s.result='false',s=>s.result=0,s=>{s.result=false;s.outcome='unknown';},s=>{s.result=false;delete s.outcome;}]){
+  const state=structuredClone(base),shot=state.events.find(e=>e.id.endsWith('shot-26'));change(shot);
+  const source=executeMatchQuery(input,query,{stateFactory:()=>state});assert.equal(source.scope.missingFields.outcome,1);
+  const onTarget=executeMatchQuery(input,{...query,filters:{type:'shot',outcome:'on-target'}},{stateFactory:()=>state});assert.equal(onTarget.scope.missingFields.outcome,1);
+ }
+ for(const [status,result,outcome]of [['goal',true,undefined],['pending',null,undefined],['saved',false,'saved'],['blocked',false,'blocked'],['off-target',false,'off-target'],['on-target',false,'on-target']]){
+  const state=structuredClone(base);state.events=state.events.filter(e=>e.type!=='shot'||e.id.endsWith('shot-26'));const shot=state.events.find(e=>e.type==='shot');shot.result=result;shot.outcome=outcome;
+  const source=executeMatchQuery(input,{...query,filters:{type:'shot',outcome:status}},{stateFactory:()=>state});assert.equal(source.count,1,status);assert.equal(source.scope.missingFields.outcome,0,status);
+ }
 });

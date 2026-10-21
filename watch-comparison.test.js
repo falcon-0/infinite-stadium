@@ -7,7 +7,7 @@ const input={kind:'sustained',seed:17,time:118,language:'en',question:'Who score
 const config={url:'https://not-called.invalid',key:'never-persist-this-secret',deployment:'mock'};
 const ref={type:'event',id:'comparison-sustained-17-shot-116',revision:2};
 const draft=text=>({premiseCheck:{questionAssumption:'A goal occurred',recordedAction:'Reed scored',conclusion:'supported'},scope:'match',claims:[{text,kind:'observation',evidence:[ref]}],followUp:''});
-const review=(decision='approve')=>({requestCheck:{requestedInformation:'scorer',status:decision==='approve'?'answered':'not-answered',reason:'Mock request relevance'},checks:[{claimIndex:0,actors:[{name:'A. Reed',action:'goal',individualAction:true}],inventedFacts:[],counts:[],reason:'Mock scenario evidence',supported:decision==='approve'}],reason:'Mock verdict',decision});
+const review=(decision='approve')=>({requestCheck:{requestedInformation:'scorer',status:decision==='approve'?'answered':'not-answered',reason:'Mock request relevance'},checks:[{claimIndex:0,actors:[{name:'A. Reed',action:'goal',individualAction:true}],inventedFacts:[],counts:[],shotOutcomeAssertions:['bucket-count'],reason:'Mock scenario evidence',supported:decision==='approve'}],reason:'Mock verdict',decision});
 function provider(values,{usage=true}={}){
  let count=0;
  return {count:()=>count,fetcher:async(_url,options)=>{

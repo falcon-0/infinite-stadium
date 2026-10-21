@@ -1,9 +1,12 @@
 import test from 'node:test';
+import {executeMatchQuery} from './match-query.js';
 
 test('a trailing unavailable-data predicate does not become a positive possession assertion',()=>{
  const answer=text=>({claims:[{kind:'limitation',text,evidence:[]}]});
  assert.deepEqual(unsupportedMeasurementClaims(answer('Pressing intensity and possession control data are unavailable.')),[]);
  assert.deepEqual(unsupportedMeasurementClaims(answer('Possession duration measurements are not recorded.')),[]);
+ for(const text of ['Possession percentage is not measured here.','Possession percentage is unavailable.','Possession rate was not recorded.','Pressure intensity is not measured.',"Northbridge's possession percentage is not available in the recorded data.",'Possession percentage is not known.',"Northbridge's possession percentage is not yet available.",'Possession percentage is currently unavailable.','Possession duration is not currently measured.'])assert.deepEqual(unsupportedMeasurementClaims(answer(text)),[],text);
+ for(const text of ['Possession percentage is high, but not measured.','Possession percentage is measured here.','Possession percentage is not measured, but Northbridge applied pressure.','Northbridge was in possession, but possession percentage is not measured.'])assert.equal(unsupportedMeasurementClaims(answer(text)).length,1,text);
  for(const text of ['Possession control is strong, but the data are unavailable.','Possession control data are available.','Possession control data are unavailable, but Cole had the ball.'])assert.equal(unsupportedMeasurementClaims(answer(text)).length,1,text);
 });
 
@@ -16,7 +19,61 @@ test('mental-state variants are rejected while an explicitly unknown decision st
  assert.deepEqual(unsupportedMeasurementClaims(answer('He took a shot which was saved.')),[]);
 });
 import assert from 'node:assert/strict';
-import {projectReviewEvidence,claimEvidenceChecks,matchEvidenceCapabilities,unsupportedCausalClaims,reviewActorsMatchEvidence,unsupportedMeasurementClaims,unsupportedAssessmentWindows,unsupportedAssistClaims,reviewCountIssues,countClaimSpans,unsupportedOrderedOutcomes,unsupportedCountCitations,isRosterAbsenceText,unsupportedEventAttributeClaims,completeNumericEvidence,completeNumericReview} from './question-evidence-check.js';
+import {projectReviewEvidence,claimEvidenceChecks,matchEvidenceCapabilities,unsupportedCausalClaims,reviewActorsMatchEvidence,unsupportedMeasurementClaims,unsupportedShotOutcomeMechanisms,unsupportedAssessmentWindows,unsupportedGoalkeeperTesting,unsupportedAssistClaims,reviewCountIssues,countClaimSpans,unsupportedOrderedOutcomes,unsupportedCountCitations,isRosterAbsenceText,unsupportedEventAttributeClaims,completeNumericEvidence,completeNumericReview} from './question-evidence-check.js';
+
+test('blocked outcome grammar rejects unrecorded physical conclusions while preserving statistical and unknown statements',()=>{
+ const answer=text=>({scope:'match',claims:[{kind:'interpretation',text,evidence:[]}]});
+ const failed='Blocked shot attempts are counted separately from saved shots and do not represent work done by the goalkeeper. They are a distinct category from saves and do not indicate keeper involvement in stopping the shot.';
+ for(const text of [failed,
+  'Blocked attempts do not count as work for the keeper.',
+  'Blocked shots do not involve goalkeeper effort.',
+  'Blocked shots never require work from the keeper.',
+  'Blocked attempts mean no work for the goalkeeper.',
+  'Defenders blocked these shots.',
+  'These shots were blocked by defenders.',
+  'Those blocked attempts were stopped before reaching the keeper.',
+  'Blocked shots are stopped before reaching the goalkeeper.',
+  'I cannot measure keeper work, but blocked shots do not require keeper effort.'
+ ]){const issues=unsupportedShotOutcomeMechanisms(answer(text));assert.equal(issues.length,1,text);assert.ok(text.includes(issues[0].assertion),issues[0].assertion);}
+ for(const text of [
+  'Blocked attempts are counted separately from saves.',
+  'Blocked shots do not add to the saved-shot count.',
+  'Blocked attempts are not counted as saves.',
+  'Harbour has faced two shots on target; this does not establish complete keeper workload.',
+  'I cannot tell whether blocked shots involve work for the keeper.',
+  'The outcome counts do not measure goalkeeper work.',
+  'These counts do not prove that blocked shots require no work from the keeper.',
+  'It is unknown whether these shots were blocked by defenders.',
+  'I cannot establish whether these attempts were stopped before reaching the keeper.',
+  'It is not true that blocked shots do not involve keeper effort.'
+ ])assert.deepEqual(unsupportedShotOutcomeMechanisms(answer(text)),[],text);
+});
+
+test('narrow factual review omits unrelated comparison summaries while retaining every cited scope and identity',()=>{
+ const ref={type:'scope',id:'goals',revision:1},source={scopeReference:ref,query:{filters:{type:'shot',result:true},aggregate:'by-team',timeFrom:0,timeTo:118},rows:[],groups:[{key:'home',count:1},{key:'away',count:0}],count:1,truncated:false,scope:{missingFields:{}}};
+ const packet={question:'What is the score?',requestedForm:'fact',answerFocus:'score',observedAt:118,roster:[{id:'home-10',name:'A. Reed'}],teams:{home:'Northbridge',away:'Harbour Athletic'},queryResults:[source],score:{home:1,away:0},playerContributions:{metrics:[]},shotTimeline:{rows:[{id:'unrelated'}]},recentComparison:{unrelated:true}};
+ const answer={claims:[{text:'Northbridge has one goal.',kind:'observation',evidence:[ref]}]},original=structuredClone(packet);
+ const projected=projectReviewEvidence(packet,answer);
+ assert.deepEqual(projected.queryResults,[source]);assert.deepEqual(projected.roster,packet.roster);assert.deepEqual(projected.score,packet.score);assert.deepEqual(packet,original);
+ assert.equal(projected.relevanceContext.playerContributions,undefined);assert.equal(projected.relevanceContext.shotTimeline,undefined);
+ const assessment=projectReviewEvidence({...packet,requestedForm:'assessment',answerFocus:'player-performance'},answer);assert.ok(assessment.relevanceContext.playerContributions);assert.ok(assessment.relevanceContext.shotTimeline);
+});
+
+test('qualitative keeper testing cannot reverse the opposing shooting evidence',()=>{
+ const ref={type:'scope',id:'target',revision:1};
+ const source={scopeReference:ref,truncated:false,count:2,query:{aggregate:'by-team',filters:{type:'shot',outcome:'on-target'},timeFrom:0,timeTo:118},groups:[{key:'home',count:2},{key:'away',count:0}],scope:{missingFields:{outcome:0}}};
+ const packet={observedAt:118,teams:{home:'Northbridge',away:'Harbour Athletic'},queryResults:[source]};
+ const answer=text=>({claims:[{kind:'interpretation',text,evidence:[ref]}]});
+ for(const text of ["Harbour Athletic has not taken any shots, so their keeper has not been tested.","Northbridge's goalkeeper has been tested."]){
+  assert.equal(unsupportedGoalkeeperTesting(answer(text),packet).length,1,text);
+ }
+ for(const text of ["Harbour Athletic's keeper has been tested.","Northbridge's goalkeeper has not been tested.","It is unclear whether Harbour Athletic's keeper has been tested."]){
+  assert.deepEqual(unsupportedGoalkeeperTesting(answer(text),packet),[],text);
+ }
+ for(const mutate of [s=>s.truncated=true,s=>s.scope.missingFields.outcome=1,s=>s.query.timeFrom=90,s=>s.query.filters.outcome='saved']){
+  const changed=structuredClone(source);mutate(changed);assert.deepEqual(unsupportedGoalkeeperTesting(answer("Northbridge's keeper has been tested."),{...packet,queryResults:[changed]}),[],'Incomplete or different evidence must not establish a contradiction');
+ }
+});
 
 const reference={type:'event',id:'recovery',revision:1};
 const answer=text=>({scope:'match',claims:[{text,kind:'observation',evidence:[reference]}]});
@@ -874,4 +931,73 @@ test('positive grouped action evidence supports involvement without repeating it
  for(const mutate of [s=>s.groups[0].count=0,s=>s.groups[0].key='cole',s=>s.truncated=true,s=>s.scope.missingFields.player=1,s=>s.query.aggregate='by-team',s=>s.query.filters.type='shot']){
   const changed=structuredClone(source);mutate(changed);assert.equal(reviewActorsMatchEvidence(review,draft,{...packet,queryResults:[changed]}),false);
  }
+});
+test('explicit shots-faced grammar binds the opposite attacking side without changing saves or shots taken',()=>{
+ for(const text of ["Harbour Athletic's keeper has been tested with 2 shots on target.",'Harbour Athletic faced 2 shots on target.',"Harbour Athletic’s goalkeeper has faced 2 shots on target."]){
+  const s=quantityFixture(text,{question:'Have the keepers been tested?',count:2,groups:[{key:'home',count:2},{key:'away',count:0}],filters:{type:'shot',outcome:'on-target'},groupKey:'home'});s.packet.queryResults[0].query.aggregate='by-team';assert.deepEqual(s.issues(),[],text);
+  s.review.checks[0].counts[0].groupKey='away';assert.ok(s.issues().length,'Facing role cannot borrow own attacking counts');
+ }
+ for(const text of ["Harbour Athletic's keeper has taken 2 shots on target.",'Harbour Athletic has taken 2 shots on target.',"Harbour Athletic's keeper has made 2 saves."]){
+  const s=quantityFixture(text,{count:2,groups:[{key:'home',count:2},{key:'away',count:0}],filters:{type:'shot',outcome:'on-target'},groupKey:'home'});s.packet.queryResults[0].query.aggregate='by-team';assert.ok(s.issues().length,text);
+ }
+});
+
+test('a missing reviewer group is completed only when the unchanged count, facing role and full scope prove it',()=>{
+ const text='The Harbour Athletic goalkeeper has been needed more as their goal has faced 2 shots on target, while Northbridge has faced none.';
+ const s=quantityFixture(text,{question:'Which end needed its goalkeeper more?',count:2,groups:[{key:'home',count:2},{key:'away',count:0}],filters:{type:'shot',outcome:'on-target'},groupKey:null});s.packet.queryResults[0].query.aggregate='by-team';
+ const original=structuredClone(s.review),completed=completeNumericReview(s.review,s.answer,s.packet);
+ assert.deepEqual(s.review,original);assert.equal(completed.review.checks[0].counts[0].groupKey,'home');assert.equal(completed.augmentations[0].reason,'verified-omitted-group-binding');assert.deepEqual(reviewCountIssues(completed.review,s.answer,s.packet),[]);
+ for(const mutate of [x=>x.review.checks[0].counts[0].groupKey='away',x=>x.packet.queryResults[0].groups[0].count=1,x=>x.packet.queryResults[0].truncated=true,x=>x.packet.queryResults[0].scope.missingFields.outcome=1,x=>x.packet.queryResults[0].query.timeFrom=90]){
+  const bad=structuredClone({review:s.review,answer:s.answer,packet:s.packet});mutate(bad);const next=completeNumericReview(bad.review,bad.answer,bad.packet);assert.equal(next.augmentations.length,0);assert.ok(reviewCountIssues(next.review,bad.answer,bad.packet).length);
+ }
+});
+
+
+test('a source-bound negative measurement limitation is not a positive overall-window judgment',async()=>{
+ const {executeMatchQuery}=await import('./match-query.js'),{matchState}=await import('./match-stream.js'),{buildQuestionFacts}=await import('./question-facts.js');
+ const input={kind:'counter',seed:1002,time:118},state=matchState(input),source=executeMatchQuery(input,{filters:{type:'shot'},aggregate:'by-team',timeFrom:88,timeTo:118});
+ const packet={question:'Over the last half-minute, which side produced more shots, and is that enough to say they were the fitter side?',observedAt:118,teams:state.metadata.teams,roster:state.frames.at(-1).players,queryResults:[source],requestedEvidence:[source]};
+ const fact=buildQuestionFacts(packet).facts.find(f=>f.proof.kind==='team-comparison'&&f.proof.metric==='attempts');assert.ok(fact);
+ const text='However, this alone is not enough to conclude that Northbridge was the fitter side, as shot count does not directly measure fitness or overall team performance.';
+ const answer={claims:[fact.claim,{kind:'interpretation',text,evidence:[...fact.claim.evidence]}],claimDependencies:[{claimIndex:1,observationIndices:[0]}]},options={canonicalFactSelection:{proofs:[fact.proof]}};
+ assert.deepEqual(unsupportedAssessmentWindows(answer,packet,options),[]);
+ for(const invalid of [{...answer,claimDependencies:[]},{...answer,claims:[fact.claim,{...answer.claims[1],text:'Northbridge was the stronger side overall.'}]},{...answer,claims:[fact.claim,{...answer.claims[1],text:text+' But Northbridge was better overall.'}]}])assert.ok(unsupportedAssessmentWindows(invalid,packet,options).length);
+ const wrong=structuredClone(options);wrong.canonicalFactSelection.proofs[0].timeFrom=0;assert.ok(unsupportedAssessmentWindows(answer,packet,wrong).length);
+ assert.ok(unsupportedAssessmentWindows(answer,packet,{canonicalFactSelection:{proofs:[{...fact.proof,kind:'count'}]}}).length);
+ const uncited=structuredClone(answer);uncited.claims[0].evidence=[];assert.ok(unsupportedAssessmentWindows(uncited,packet,options).length);
+});
+
+test('measurement absence inventory names only explicit unrecorded dimensions',()=>{const capabilities=matchEvidenceCapabilities({});assert.deepEqual(capabilities.unavailableMeasurements,['possession','pressing','xG','readiness']);for(const recorded of ['passCompletionRate','attempts','recoveries'])assert.ok(!capabilities.unavailableMeasurements.includes(recorded));});
+
+
+test('causal negation belongs to its predicate, not an unrelated or additive clause',()=>{
+ for(const text of [
+  'He not only forced a turnover but also recovered the ball.',
+  'He did not force the mistake but caused the turnover.',
+  'It is unknown who forced the error, but he caused the turnover.',
+  'He did not force but caused the turnover.',
+  'He was not tired and forced a turnover.',
+  'He was never tired when he forced an error.',
+  'He did not recover the ball, then forced a turnover.',
+  'It is not unclear that Cole forced the turnover.'
+ ])assert.equal(unsupportedCausalClaims(answer(text)).length,1,text);
+ for(const text of [
+  'Cole did not directly force the turnover.',
+  'We cannot tell whether Cole forced the mistake.',
+  'We cannot say who caused the error.',
+  'It is not known who forced the turnover.',
+  'The recovery does not establish who forced the turnover.',
+  'It is unclear whether Cole forced the error.',
+  'There is no evidence that Cole forced the turnover.',
+  'Cole recovered the ball and we cannot tell who forced the error.'
+ ])assert.deepEqual(unsupportedCausalClaims(answer(text)),[],text);
+});
+
+
+test('saved-shot collections cannot become unqualified comparative personal save credit',()=>{
+ const source=executeMatchQuery({kind:'counter',seed:2063,time:90},{filters:{type:'recovery',recoveryKind:'goalkeeper-hold',linkedShotOutcome:'saved'},aggregate:'by-player',timeFrom:0,timeTo:90});
+ const packet={observedAt:90,queryResults:[source]},check=text=>unsupportedGoalkeeperTesting({claims:[{kind:'interpretation',text,evidence:[source.scopeReference]}]},packet);
+ for(const text of ["I. Kerr has faced and saved more shots on target than M. Carter.","Kerr made more saves than Carter.","Kerr has fewer saves.","Kerr realizó más paradas.","Kerr a fait plus d’arrêts.","Kerr fez mais defesas.","It is unclear who was better and Kerr made more saves than Carter.","It is unclear who was better and he made more saves than Carter.","It is unclear whether Kerr was better and Carter made more saves."])assert.equal(check(text)[0]?.attribute,'personal-save-credit',text);
+ for(const text of ["Kerr collected more saved shots, which does not establish who was the better keeper.","These collections do not mean Kerr made more saves.","It is unclear whether Kerr saved more shots.","It is unclear whether Kerr and Carter made more saves.","It is unclear whether I. Kerr and M. Carter made more saves.","This does not mean Kerr and Carter made more saves.","No sabemos si Kerr y Carter realizaron más paradas.","On ne sait pas si Kerr et Carter ont fait plus d’arrêts.","Não sabemos se Kerr e Carter fizeram mais defesas.","No sabemos si Kerr realizó más paradas.","On ne sait pas si Kerr a fait plus d’arrêts.","Não sabemos se Kerr fez mais defesas.","This does not mean Kerr faced and saved more shots.","Kerr has had more to do on this collection measure; it does not rate overall keeping ability."])assert.deepEqual(check(text),[],text);
+ assert.equal(check("The collections do not establish ability, but Kerr made more saves.")[0]?.attribute,'personal-save-credit');
 });

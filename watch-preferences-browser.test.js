@@ -7,6 +7,34 @@ import {VIEWER_PREFERENCES_KEY} from './viewer-preferences.js';
 const playwright=await import(process.env.PLAYWRIGHT_MODULE||'playwright').catch(()=>null);
 if(process.env.REQUIRE_BROWSER_TESTS==='1'&&!playwright)throw new Error('Browser tests required but Playwright is unavailable.');
 
+test('asking a question keeps the actual Watch clock advancing while its answer stays pinned',{skip:!playwright},async()=>{
+ const server=createServer({env:{}});server.listen(0,'127.0.0.1');await once(server,'listening');
+ let browser,release,submitted;
+ try{
+  browser=await playwright.chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
+  const page=await browser.newPage({viewport:{width:1366,height:900}});
+  await page.route('**/api/ai/status',route=>route.fulfill({json:{provider:'azure',configured:true,available:true,questionAvailable:true,authRequired:false}}));
+  await page.route('**/api/agent/question',async route=>{
+   submitted=route.request().postDataJSON();await new Promise(resolve=>release=resolve);
+   const {kind,seed,time}=submitted,match=matchState({kind,seed,time});
+   return route.fulfill({json:{schema:'infinite-stadium.match-question.v1',matchId:match.metadata.id,question:submitted.question,answer:'This is a local interaction test response.',observedAt:time,language:'en',claims:[],moments:[],evidence:[]}});
+  });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?view=watch&match=northbridge-harbour`);
+  await page.locator('#unified-play').click();
+  const seconds=()=>{const parts=document.querySelector('#unified-clock').textContent.match(/(\d+):(\d+)/);return parts?Number(parts[1])*60+Number(parts[2]):0;};
+  await page.waitForFunction(seconds=>{const parts=document.querySelector('#unified-clock').textContent.match(/(\d+):(\d+)/);return parts&&Number(parts[1])*60+Number(parts[2])>=seconds;},3);
+  await page.locator('#match-question').fill('What is happening now?');await page.locator('.match-chat button[type=submit]').click();
+  await page.locator('[data-turn-state=pending]').waitFor();
+  for(let n=0;!submitted&&n<100;n++)await new Promise(resolve=>setTimeout(resolve,10));assert.ok(submitted);
+  const pinned=submitted.time,before=await page.evaluate(seconds);
+  await page.waitForFunction(previous=>{const parts=document.querySelector('#unified-clock').textContent.match(/(\d+):(\d+)/);return parts&&Number(parts[1])*60+Number(parts[2])>=previous+3;},before);
+  assert.equal(submitted.time,pinned);assert.equal(await page.locator('[data-turn-state=pending]').count(),1);
+  release();await page.locator('[data-turn-state=answered]').waitFor();
+  const stamp=`${String(Math.floor(pinned/60)).padStart(2,'0')}:${String(Math.floor(pinned%60)).padStart(2,'0')}`;
+  assert.match(await page.locator('[data-turn-state=answered]').innerText(),new RegExp(stamp));
+ }finally{release?.();await browser?.close();await new Promise(resolve=>server.close(resolve));}
+});
+
 test('Watch viewing options follow inactive roster players, persist applied choices and discard staged changes',{skip:!playwright},async()=>{
  const server=createServer({env:{}});server.listen(0,'127.0.0.1');await once(server,'listening');
  let browser;

@@ -1,6 +1,7 @@
 import {snapshot,explainMoment,teams,duration} from './engine.js';
 import {languagePreference,recapSummary,localizedMoment} from './localization.js';
 import {isSafePlayerName} from './viewer-preferences.js';
+import {recoveryClassification} from './recovery-classification.js';
 
 const ref=e=>({id:e.id,revision:e.revision});
 const key=refs=>refs.map(e=>`${e.id}@${e.revision}`).join('|');
@@ -11,6 +12,19 @@ const detailCopy={
  es:{recovery:(p,s)=>`${p} recuperó el balón ${s} segundos antes del remate.`,passes:(club,n,start,end)=>`${club}: ${n} ${n===1?'pase completado':'pases completados'} en la ventana de 15 segundos (${start}–${end}).`,favorite:'Este momento incluye a tu club o jugador elegido.'},
  fr:{recovery:(p,s)=>`${p} a récupéré le ballon ${s} secondes avant le tir.`,passes:(club,n,start,end)=>`${club} : ${n} passe${n===1?' réussie':'s réussies'} dans la fenêtre de 15 secondes (${start}–${end}).`,favorite:'Ce moment concerne votre club ou joueur choisi.'},
  pt:{recovery:(p,s)=>`${p} recuperou a bola ${s} segundos antes do remate.`,passes:(club,n,start,end)=>`${club}: ${n} passe${n===1?' completo':'s completos'} na janela de 15 segundos (${start}–${end}).`,favorite:'Este momento envolve o clube ou jogador que escolheu.'}
+};
+
+const collectionCopy={
+ en:(p,s)=>`${p} collected the ball ${s} seconds before the shot.`,
+ es:(p,s)=>`${p} recogió el balón ${s} segundos antes del remate.`,
+ fr:(p,s)=>`${p} a capté le ballon ${s} secondes avant le tir.`,
+ pt:(p,s)=>`${p} recolheu a bola ${s} segundos antes do remate.`
+};
+const initialControlCopy={
+ en:(p,s)=>`${p} had control of the ball ${s} seconds before the shot.`,
+ es:(p,s)=>`${p} tenía el control del balón ${s} segundos antes del remate.`,
+ fr:(p,s)=>`${p} contrôlait le ballon ${s} secondes avant le tir.`,
+ pt:(p,s)=>`${p} tinha o controlo da bola ${s} segundos antes do remate.`
 };
 
 export function narrativePreferences(input={}){
@@ -41,7 +55,12 @@ export function selectNarratives(state,input={},selection={}){
   const evidence=unique([...explanation.evidence,...goals.map(ref)]);
   const own=sequence.filter(e=>e.team===anchor.team),completed=own.filter(e=>e.type==='pass'&&e.result===true).length;
   const c=detailCopy[preferences.language],details=[];
-  if(linked)details.push(c.recovery(recovery.player,anchor.time-recovery.time));
+  if(linked){
+   // Keep the shared ball-win metric unchanged. A keeper hold is best
+   // described as a collection, and initial control is never a ball win.
+   const kind=recoveryClassification(recovery),render=recovery.recoveryKind==='goalkeeper-hold'||kind==='unknown'?collectionCopy[preferences.language]:kind==='initial-control'?initialControlCopy[preferences.language]:c.recovery;
+   details.push(render(recovery.player,anchor.time-recovery.time));
+  }
   if(preferences.audience==='analyst')details.push(c.passes(teams[anchor.team],completed,clock(Math.max(0,anchor.time-15)),clock(anchor.time)));
   if(preferences.audience==='player'&&favorite)details.push(c.favorite);
   const text=localizedMoment(preferences.language,anchor,teams[anchor.team],score,preferences.audience,details.join(' '));

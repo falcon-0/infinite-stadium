@@ -1,5 +1,6 @@
 import {createStreamCadence} from './stream-cadence.js';
 import http from 'node:http';
+import {performance} from 'node:perf_hooks';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {resolve,dirname,basename} from 'node:path';
 import {existsSync,lstatSync} from 'node:fs';
@@ -37,7 +38,13 @@ files.set('/moment-path.js','moment-path.js');
 for(const name of ['fixture-settings','match-picture','match-change','producer-review','producer-review-ui','viewer-refresh','viewer-moments','pitch-motion','pitch-renderer','moment-replay','moment-meaning','fan-experience'])files.set(`/${name}.js`,`${name}.js`);
 files.set('/fan-experience.css','fan-experience.css');
 for(const name of ['production-desk-ui','production-desk-state','match-chat-ui','match-chat-state','watch-insights','watch-stats','watch-snapshot','recovery-classification'])files.set(`/${name}.js`,`${name}.js`);
-function json(res,status,data){if(res.destroyed||res.writableEnded)return;res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));}
+const handlerStarts=new WeakMap();
+function json(res,status,data){
+ if(res.destroyed||res.writableEnded)return;
+ const body=JSON.stringify(data),duration=Math.max(0,performance.now()-handlerStarts.get(res));
+ res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Server-Timing':`app;dur=${duration.toFixed(3)}`});
+ res.end(body);
+}
 function budgetFilename(value){
  if(value===undefined||value==='')return null;
  if(typeof value!=='string'||value.length>300)throw new Error('Invalid model budget file configuration.');
@@ -62,6 +69,7 @@ export function createServer({env=process.env,fetcher=fetch,localRunner,localSta
  let generating=false,streams=0;
  const countedFetch=async(...args)=>{args[1]?.signal?.throwIfAborted();await budget.take();args[1]?.signal?.throwIfAborted();return fetcher(...args);};
  const server=http.createServer(async (req, res) => {
+  handlerStarts.set(res,performance.now());
   try {
   let requestURL;
   try{requestURL=new URL(req.url,'http://localhost');}

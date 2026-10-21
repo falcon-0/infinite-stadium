@@ -83,3 +83,70 @@ test('offline CLI scores a historical file without model credentials and refuses
   assert.notEqual(spawnSync(process.execPath,args,{encoding:'utf8',windowsHide:true}).status,0);
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
+
+test('composition capture preserves exact writer selection, unsupported prose and captured catalogue provenance',()=>{
+ const p=plan();
+ const catalog={version:'question-facts-v1',sourceFingerprint:'frozen-source',facts:[
+  {id:'second',claim:{text:'Second selected fact.',kind:'observation',evidence:[{id:'e2',revision:2}]},selection:{kind:'count',timeTo:96}},
+  {id:'unused',claim:{text:'Must never enter draft.',kind:'observation',evidence:[]}},
+  {id:'first',claim:{text:'First selected fact.',kind:'observation',evidence:[{id:'e1',revision:1}]}}
+ ]};
+ const paragraph={text:'Unsupported physical certainty, kept verbatim.',kind:'interpretation',evidence:[],dependsOn:[1]};
+ const raw={composition:{mode:'explanation',factIds:['first','second'],claim:paragraph}};
+ const rawJSON=JSON.stringify(raw);
+ const r=report(p,1,{calls:[{output:rawJSON,request:{messages:[{role:'user',content:JSON.stringify({matchFacts:catalog})}]}}]});
+ const row=scoreConversationReports(p,[r]).rows[0],candidate=row.draftCandidates[0];
+ assert.equal(candidate.rawJSON,rawJSON);assert.deepEqual(candidate.rawValue,raw);
+ assert.deepEqual(candidate.selectedFactIds,['first','second']);
+ assert.deepEqual(candidate.generatedParagraph,paragraph);
+ assert.equal(candidate.text,'First selected fact. Second selected fact. Unsupported physical certainty, kept verbatim.');
+ assert.equal(candidate.catalogProvenance.sourceFingerprint,'frozen-source');
+ assert.match(candidate.catalogProvenance.capturedCatalogHash,/^[a-f0-9]{64}$/);
+ assert.deepEqual(candidate.selectedFacts[1].fact.claim.evidence,[{id:'e2',revision:2}]);
+ assert.equal(candidate.stage,'raw-writer-output');assert.equal(candidate.canonicalAnswer,null);
+ assert.equal(row.finalCapture.stage,'final-returned');assert.notEqual(row.answer,candidate.text);
+ assert.equal(row.review,null);assert.equal(candidate.quality,'unreviewed');
+});
+
+test('unknown or ambiguous IDs stay unresolved rather than borrowing final or other-call facts',()=>{
+ const p=plan(),raw={composition:{mode:'facts',factIds:['missing']}};
+ const catalog={sourceFingerprint:'current',facts:[{id:'known',claim:{text:'Known.'}}]};
+ const r=report(p,1,{answer:{answer:'Final answer must not fill missing drafts.',canonicalFactSelection:{selectedFactIds:['missing']}},calls:[
+  {output:JSON.stringify(raw),request:{messages:[{role:'user',content:JSON.stringify({matchFacts:catalog})}]}},
+  {output:JSON.stringify({composition:{mode:'facts',factIds:['known']}})},
+  {output:JSON.stringify({composition:{mode:'facts',factIds:['duplicate']}}),request:{messages:[{role:'user',content:JSON.stringify({matchFacts:{facts:[{id:'duplicate',claim:{text:'A'}},{id:'duplicate',claim:{text:'B'}}]}})}]}}
+ ]});
+ const drafts=scoreConversationReports(p,[r]).rows[0].draftCandidates;
+ assert.equal(drafts[0].selectedFacts[0].resolution,'unknown-id');
+ assert.equal(drafts[1].selectedFacts[0].resolution,'catalog-unavailable');
+ assert.equal(drafts[2].selectedFacts[0].resolution,'ambiguous-id');
+ for(const candidate of drafts){assert.equal(candidate.text,null);assert.equal(candidate.claims,null);assert.equal(candidate.canonicalAnswer,null);assert.equal(candidate.selectionResolution,'unresolved');}
+ assert.equal(drafts[1].catalogProvenance,null);
+});
+
+test('native response envelopes and repair catalogues remain distinct from prechecked and failed stages',()=>{
+ const p=plan();
+ const rejected={claims:[{text:'Rejected certainty.'}]};
+ const raw={composition:{mode:'explanation',factIds:['f'],claim:{text:'Still unsupported.',kind:'interpretation',dependsOn:[0],evidence:[]}}};
+ const checked={claims:[{text:'Already checked source text.'}]};
+ const repairPayload={evidence:{matchFacts:{sourceFingerprint:'repair-source',facts:[{id:'f',claim:{text:'Captured support.'}}]}},rejectedAnswer:rejected,feedback:{issues:['source guard issue']}};
+ const request={messages:[{role:'user',content:JSON.stringify(repairPayload)}]};
+ const calls=[{request,response:JSON.stringify({choices:[{message:{content:JSON.stringify(raw)}}]})},
+  {schema:'match_answer_review',request:{messages:[{role:'user',content:JSON.stringify({answer:checked,evidence:{sourceFingerprint:'checked-source'}})}]},response:{choices:[{message:{content:JSON.stringify({checks:[]})}}]}},
+  {request:{messages:[{role:'user',content:JSON.stringify({rejectedPlan:{decision:{kind:'general'}},planningError:'Needs match evidence.'})}]},output:JSON.stringify({decision:{kind:'queries'}})}];
+ const row=scoreConversationReports(p,[report(p,1,{status:'failed',answer:null,error:{code:'question-withheld',message:'Rejected.'},calls})]).rows[0];
+ assert.equal(row.draftCandidates.length,1);assert.equal(row.draftCandidates[0].generatedParagraph.text,'Still unsupported.');
+ assert.equal(row.draftCandidates[0].catalogProvenance.location,'request.user.evidence.matchFacts');
+ assert.deepEqual(row.precheckedCandidates[0].answer,checked);assert.equal(row.precheckedCandidates[0].quality,'unreviewed');
+ assert.match(row.precheckedCandidates[0].limitation,/not an independent baseline/);
+ assert.deepEqual(row.rejectionStages.map(r=>r.stage),['repair-request','planning-repair-request']);
+ assert.deepEqual(row.rejectionStages[0].rejectedAnswer,rejected);
+ assert.equal(row.failureCapture.stage,'reported-failure');assert.equal(row.finalCapture,null);
+});
+
+test('special composition transformations are not invented by draft capture',()=>{
+ const p=plan(),r=report(p,1,{calls:[{output:JSON.stringify({composition:{mode:'player-pick',playerId:'home-7',factIds:['f']}}),request:{messages:[{role:'user',content:JSON.stringify({matchFacts:{facts:[{id:'f',claim:{text:'One recorded event.'}}]}})}]}}]});
+ const draft=scoreConversationReports(p,[r]).rows[0].draftCandidates[0];
+ assert.equal(draft.selectionResolution,'resolved');assert.equal(draft.selectedFacts[0].fact.claim.text,'One recorded event.');
+ assert.equal(draft.text,null);assert.equal(draft.canonicalAnswer,null);
+});
