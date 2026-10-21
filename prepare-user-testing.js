@@ -1,56 +1,190 @@
-import {mkdir,writeFile} from 'node:fs/promises';
-import {integratedMatch} from './match-stream.js';
-import {integratedFeed} from './match-stream.js';
-import {catchup} from './catchup.js';
-import {matchChange} from './match-change.js';
-const scenarios=['sustained','interrupted','quiet'];
-const cases=scenarios.map(kind=>{
- const input={kind,seed:17,time:120,audience:'newcomer',language:'en'},bundle=integratedMatch(input);
- const received=integratedFeed(kind,17).events,summary=catchup(received,120,90),change=matchChange(received,120);
- return {caseId:kind,input,departureTime:90,participantTasks:['What is the current score?','What changed since 01:30?','Open one moment and identify its time separately from the replay time.','What does this evidence tell you, and what can it not establish?','Return to the current moment and resume the replay.'],
-  facilitatorOnly:{score:bundle.recap.score,newShots:summary.counts.shots,newGoals:summary.counts.goals,highlights:summary.highlights,change:{status:change.status,text:change.text},mustNotInfer:['tactical pressure caused the change','these short supplied passages prove complete match coverage','a sampled link is the continuous ball trajectory']}};
+import { mkdir, writeFile } from 'node:fs/promises';
+import { integratedMatch } from './match-stream.js';
+import { integratedFeed } from './match-stream.js';
+import { catchup } from './catchup.js';
+import { matchChange } from './match-change.js';
+const scenarios = ['sustained', 'interrupted', 'quiet'];
+const cases = scenarios.map((kind) => {
+  const input = { kind, seed: 17, time: 120, audience: 'newcomer', language: 'en' },
+    bundle = integratedMatch(input);
+  const received = integratedFeed(kind, 17).events,
+    summary = catchup(received, 120, 90),
+    change = matchChange(received, 120);
+  return {
+    caseId: kind,
+    input,
+    departureTime: 90,
+    participantTasks: [
+      'What is the current score?',
+      'What changed since 01:30?',
+      'Open one moment and identify its time separately from the replay time.',
+      'What does this evidence tell you, and what can it not establish?',
+      'Return to the current moment and resume the replay.',
+    ],
+    facilitatorOnly: {
+      score: bundle.recap.score,
+      newShots: summary.counts.shots,
+      newGoals: summary.counts.goals,
+      highlights: summary.highlights,
+      change: { status: change.status, text: change.text },
+      mustNotInfer: [
+        'tactical pressure caused the change',
+        'these short supplied passages prove complete match coverage',
+        'a sampled link is the continuous ball trajectory',
+      ],
+    },
+  };
 });
-const pack={schema:'infinite-stadium.formative-test-pack.v1',status:'materials-prepared-no-sessions-conducted',createdAt:new Date().toISOString(),
- purpose:'Small formative comparison of plain received events and the fan journey; not a representative study.',
- recruitment:{fansSuggested:6,footballReviewersSuggested:1,producerReviewersSuggested:2,actualParticipants:0},
- sessionInstructions:['Keep facilitator-only answers hidden from participants.','Obtain voluntary participation; use anonymous IDs and omit names/contact details.','Alternate presentation order: odd session baseline first, even session fan view first; rotate scenario order.','Use different equivalent passages across conditions, disclose the remaining scenario differences.','Do not coach before the first task; record help separately.','Separate actual recorded replies from facilitator interpretations.'],cases,
- observationTemplate:{anonymousId:null,condition:null,caseId:null,elapsedSeconds:null,answers:[],scoreCorrect:null,selectedVsReplayTimeCorrect:null,unsupportedInference:null,helpRequired:null,effortRating1to5:null,notes:null},
- footballReview:{status:'not-conducted',checks:['Watch the entire passage: ball control, flight, collection and possession changes','Check intended successful pass origins for onside receiving runs','Check involved player and defender movement','Check shot category, goalkeeper involvement and any shown restart','Plausible sequence pacing','Unsupported tactical/causal implications'],findings:[]},
- producerTask:{status:'not-conducted',goal:'Prepare a clear 30-second rundown for a casual football audience, then recover it after a received correction.',instructions:['Using the supplied passage, choose the moments that explain the score and the important recent change. Produce a reviewed script totaling 30 seconds; explain any item you leave out.','Repeat an equivalent task with the plain event-feed baseline. Counterbalance task order; record help separately.','Receive a correction or withdrawal. Identify and repair the affected script and exported file while preserving unaffected reviewed items.','Show that the current preview and export contain the same reviewed text, order and pacing.'],measurements:{timeToReviewedOutput:null,editingSteps:null,staleClaimsMissed:null,unaffectedApprovalsLost:null,scriptAcceptedForAudience:null,previewMatchesExport:null,correctionRecoverySeconds:null,helpRequired:null}},
- accessibilityAndLanguage:{status:'not-conducted',checks:['Keyboard operation and focus after updates','Narrow width and enlarged text','Screen reader reading order and story language','Native speaker review of each claimed language'],claimRestriction:'No accessibility or native-language benefit is established by prepared materials.'}};
-await mkdir(new URL('./artifacts/user-testing/',import.meta.url),{recursive:true});
-await writeFile(new URL('./artifacts/user-testing/session-pack.json',import.meta.url),JSON.stringify(pack,null,2)+'\n');
-const fanTasks=[
- 'Watch the passage for a minute. Describe what this product helps you do, in your own words.',
- 'When something interests or confuses you, ask the companion your own question. Do not use a question supplied by the facilitator.',
- 'Ask a follow-up in your own words. Explain whether the answer understood what you meant.',
- 'While the answer is visible, check whether the match continues and which moment the answer describes.',
- 'Find the support for one answer. Explain what is recorded and what is uncertain.',
- 'Try changing the experience to suit you, then tell us whether the difference is useful.',
- 'At the end, explain the main story of the passage. Tell us what you would remove from the screen.'
+const pack = {
+  schema: 'infinite-stadium.formative-test-pack.v1',
+  status: 'materials-prepared-no-sessions-conducted',
+  createdAt: new Date().toISOString(),
+  purpose:
+    'Small formative comparison of plain received events and the fan journey; not a representative study.',
+  recruitment: {
+    fansSuggested: 6,
+    footballReviewersSuggested: 1,
+    producerReviewersSuggested: 2,
+    actualParticipants: 0,
+  },
+  sessionInstructions: [
+    'Keep facilitator-only answers hidden from participants.',
+    'Obtain voluntary participation; use anonymous IDs and omit names/contact details.',
+    'Alternate presentation order: odd session baseline first, even session fan view first; rotate scenario order.',
+    'Use different equivalent passages across conditions, disclose the remaining scenario differences.',
+    'Do not coach before the first task; record help separately.',
+    'Separate actual recorded replies from facilitator interpretations.',
+  ],
+  cases,
+  observationTemplate: {
+    anonymousId: null,
+    condition: null,
+    caseId: null,
+    elapsedSeconds: null,
+    answers: [],
+    scoreCorrect: null,
+    selectedVsReplayTimeCorrect: null,
+    unsupportedInference: null,
+    helpRequired: null,
+    effortRating1to5: null,
+    notes: null,
+  },
+  footballReview: {
+    status: 'not-conducted',
+    checks: [
+      'Watch the entire passage: ball control, flight, collection and possession changes',
+      'Check intended successful pass origins for onside receiving runs',
+      'Check involved player and defender movement',
+      'Check shot category, goalkeeper involvement and any shown restart',
+      'Plausible sequence pacing',
+      'Unsupported tactical/causal implications',
+    ],
+    findings: [],
+  },
+  producerTask: {
+    status: 'not-conducted',
+    goal: 'Prepare a clear 30-second rundown for a casual football audience, then recover it after a received correction.',
+    instructions: [
+      'Using the supplied passage, choose the moments that explain the score and the important recent change. Produce a reviewed script totaling 30 seconds; explain any item you leave out.',
+      'Repeat an equivalent task with the plain event-feed baseline. Counterbalance task order; record help separately.',
+      'Receive a correction or withdrawal. Identify and repair the affected script and exported file while preserving unaffected reviewed items.',
+      'Show that the current preview and export contain the same reviewed text, order and pacing.',
+    ],
+    measurements: {
+      timeToReviewedOutput: null,
+      editingSteps: null,
+      staleClaimsMissed: null,
+      unaffectedApprovalsLost: null,
+      scriptAcceptedForAudience: null,
+      previewMatchesExport: null,
+      correctionRecoverySeconds: null,
+      helpRequired: null,
+    },
+  },
+  accessibilityAndLanguage: {
+    status: 'not-conducted',
+    checks: [
+      'Keyboard operation and focus after updates',
+      'Narrow width and enlarged text',
+      'Screen reader reading order and story language',
+      'Native speaker review of each claimed language',
+    ],
+    claimRestriction:
+      'No accessibility or native-language benefit is established by prepared materials.',
+  },
+};
+await mkdir(new URL('./artifacts/user-testing/', import.meta.url), { recursive: true });
+await writeFile(
+  new URL('./artifacts/user-testing/session-pack.json', import.meta.url),
+  JSON.stringify(pack, null, 2) + '\n',
+);
+const fanTasks = [
+  'Watch the passage for a minute. Describe what this product helps you do, in your own words.',
+  'When something interests or confuses you, ask the companion your own question. Do not use a question supplied by the facilitator.',
+  'Ask a follow-up in your own words. Explain whether the answer understood what you meant.',
+  'While the answer is visible, check whether the match continues and which moment the answer describes.',
+  'Find the support for one answer. Explain what is recorded and what is uncertain.',
+  'Try changing the experience to suit you, then tell us whether the difference is useful.',
+  'At the end, explain the main story of the passage. Tell us what you would remove from the screen.',
 ];
-const htmlEscape=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const page=(title,body)=>`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font:17px/1.6 system-ui;background:#111016;color:#f5f1fa;max-width:850px;margin:40px auto;padding:0 24px}h1,h2{line-height:1.2}li{margin:14px 0}a{color:#cbff35}label{display:block;margin-top:20px}textarea,input,select,button{font:inherit;box-sizing:border-box;padding:10px;border:1px solid #726580;border-radius:6px;background:#231d2c;color:inherit}textarea{width:100%;min-height:90px}button{background:#cbff35;color:#151018;cursor:pointer;margin:24px 0}small{color:#c7bdce}.notice{border-left:4px solid #cbff35;padding:12px 18px;background:#211a2b}@media print{body{background:white;color:black}button{display:none}}</style><h1>${title}</h1>${body}</html>`;
-await writeFile(new URL('./artifacts/user-testing/participant.html',import.meta.url),page('Try Infinite Stadium',`
+const htmlEscape = (v) =>
+  String(v).replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+  );
+const page = (title, body) =>
+  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font:17px/1.6 system-ui;background:#111016;color:#f5f1fa;max-width:850px;margin:40px auto;padding:0 24px}h1,h2{line-height:1.2}li{margin:14px 0}a{color:#cbff35}label{display:block;margin-top:20px}textarea,input,select,button{font:inherit;box-sizing:border-box;padding:10px;border:1px solid #726580;border-radius:6px;background:#231d2c;color:inherit}textarea{width:100%;min-height:90px}button{background:#cbff35;color:#151018;cursor:pointer;margin:24px 0}small{color:#c7bdce}.notice{border-left:4px solid #cbff35;padding:12px 18px;background:#211a2b}@media print{body{background:white;color:black}button{display:none}}</style><h1>${title}</h1>${body}</html>`;
+await writeFile(
+  new URL('./artifacts/user-testing/participant.html', import.meta.url),
+  page(
+    'Try Infinite Stadium',
+    `
 <p>This is a fictional football passage, not real match footage. We are testing the product, not your football knowledge. You can stop at any time.</p>
 <p>Use the project site on the facilitator's computer. Think aloud as you try it. If something is confusing, say so; there are no preferred opinions.</p>
-<ol>${fanTasks.map(t=>`<li>${htmlEscape(t)}</li>`).join('')}</ol>
-<p>Finish by describing one helpful thing, one frustrating thing, and whether you would use this alongside a match.</p>`));
-await writeFile(new URL('./artifacts/user-testing/facilitator.html',import.meta.url),page('Fan-testing facilitator guide',`
+<ol>${fanTasks.map((t) => `<li>${htmlEscape(t)}</li>`).join('')}</ol>
+<p>Finish by describing one helpful thing, one frustrating thing, and whether you would use this alongside a match.</p>`,
+  ),
+);
+await writeFile(
+  new URL('./artifacts/user-testing/facilitator.html', import.meta.url),
+  page(
+    'Fan-testing facilitator guide',
+    `
 <p class="notice">Prepared materials only. No sessions have been conducted. Current cloud allowance is exhausted: test the Watch interface offline now, and defer the open-AI tasks until the authorized allowance is available. Recorded search cannot validate open AI conversation.</p>
 <h2>Before a session</h2><ol><li>Arrange 5-6 fans with different football familiarity and one football-knowledgeable reviewer. Use anonymous IDs F01-F06 and R01. Do not collect contact details in results.</li><li>Allow 15-20 minutes per fan. Use the local site on this computer; a localhost link will not work on their own device. Remote hosting is a separate step.</li><li>Record the build commit, scenario, device, language and actual provider mode. Confirm voluntary participation. Do not record audio/video without their agreement.</li><li>Open participant.html separately from this guide. Keep the facilitator answer key in session-pack.json hidden.</li></ol>
 <h2>During the session</h2><p>Let the fan choose their own questions. Record exact wording, submitted replay time, actual answer, waiting time, and any assistance. Do not teach the interface before observing the first attempt. Mark unavailable tasks as not tested, never passed.</p>
 <p>For a disputed answer, preserve its sources and replay time. Check it against the received record at that time, including revisions; later events must not be used to judge what the assistant knew earlier. Ask the football reviewer to assess interpretation separately from factual support.</p>
 <h2>Review and fix</h2><ul><li>Block submission for invented match facts, an answer tied to the wrong moment, a question stopping playback, or an unusable core task.</li><li>Prioritize repeated confusion, excessive answer length, animation discomfort and irrelevant controls.</li><li>Record each issue with reproduction steps, severity, owner and retest outcome. Retest fixes with participants where possible.</li><li>Report actual counts and examples, not a statistical accuracy or adoption claim from a small sample.</li></ul>
-<p><a href="feedback.html">Open a blank session record</a> / <a href="participant.html">Participant task sheet</a></p>`));
-const fields=[['build','Build commit'],['mode','Actual provider mode (recorded search / Azure AI)'],['setup','Scenario, device and language'],['questions','Exact questions, follow-ups and submitted match times'],['answers','Actual answers and source references; separate quotes from observations'],['playback','Did playback continue? Was the answer timestamp understood?'],['issues','Observed difficulties, help given and reproduction steps'],['review','Football reviewer: supported facts, interpretations, unknowns or errors'],['reaction','Participant comments, including what they would remove'],['retest','Fixes and retest results (leave blank until performed)']];
-await writeFile(new URL('./artifacts/user-testing/feedback.html',import.meta.url),page('Anonymous fan session record',`
+<p><a href="feedback.html">Open a blank session record</a> / <a href="participant.html">Participant task sheet</a></p>`,
+  ),
+);
+const fields = [
+  ['build', 'Build commit'],
+  ['mode', 'Actual provider mode (recorded search / Azure AI)'],
+  ['setup', 'Scenario, device and language'],
+  ['questions', 'Exact questions, follow-ups and submitted match times'],
+  ['answers', 'Actual answers and source references; separate quotes from observations'],
+  ['playback', 'Did playback continue? Was the answer timestamp understood?'],
+  ['issues', 'Observed difficulties, help given and reproduction steps'],
+  ['review', 'Football reviewer: supported facts, interpretations, unknowns or errors'],
+  ['reaction', 'Participant comments, including what they would remove'],
+  ['retest', 'Fixes and retest results (leave blank until performed)'],
+];
+await writeFile(
+  new URL('./artifacts/user-testing/feedback.html', import.meta.url),
+  page(
+    'Anonymous fan session record',
+    `
 <p>No feedback is submitted online. Download a local JSON record when finished. Blank fields remain unassessed. Reloading clears unsaved entries.</p>
 <form id="record"><label>Anonymous participant ID <input name="participantId" required pattern="[FR][0-9]{2}" placeholder="F01"></label>
 <label>Session status <select name="status"><option value="not-started">Not started</option><option value="partial">Partially conducted</option><option value="conducted">Conducted</option></select></label>
 <label>Participation <select name="consent"><option value="not-confirmed">Not confirmed</option><option value="confirmed">Voluntary participation confirmed</option></select></label>
-${fields.map(([name,label])=>`<label>${label}<textarea name="${name}"></textarea></label>`).join('')}
-<h2>Task outcomes</h2>${fanTasks.map((task,i)=>`<label>${i+1}. ${htmlEscape(task)}<br><select name="task${i+1}"><option value="not-tested">Not tested</option><option value="independent">Completed independently</option><option value="help">Completed with help</option><option value="failed">Could not complete</option></select></label>`).join('')}
+${fields.map(([name, label]) => `<label>${label}<textarea name="${name}"></textarea></label>`).join('')}
+<h2>Task outcomes</h2>${fanTasks.map((task, i) => `<label>${i + 1}. ${htmlEscape(task)}<br><select name="task${i + 1}"><option value="not-tested">Not tested</option><option value="independent">Completed independently</option><option value="help">Completed with help</option><option value="failed">Could not complete</option></select></label>`).join('')}
 <button type="submit">Download session record</button><p id="status" role="status"></p></form>
-<script>document.querySelector('form').onsubmit=e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));if(data.status!=='not-started'&&data.consent!=='confirmed'){document.querySelector('#status').textContent='Confirm voluntary participation before saving a conducted session.';return;}const blob=new Blob([JSON.stringify({schema:'infinite-stadium.fan-session.v1',savedAt:new Date().toISOString(),...data},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=data.participantId+'-fan-session.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);document.querySelector('#status').textContent='Session record downloaded locally.';};</script>`));
-console.log('Prepared anonymous task/observation materials and separate facilitator answers. No participants, outreach or model calls.');
+<script>document.querySelector('form').onsubmit=e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));if(data.status!=='not-started'&&data.consent!=='confirmed'){document.querySelector('#status').textContent='Confirm voluntary participation before saving a conducted session.';return;}const blob=new Blob([JSON.stringify({schema:'infinite-stadium.fan-session.v1',savedAt:new Date().toISOString(),...data},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=data.participantId+'-fan-session.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);document.querySelector('#status').textContent='Session record downloaded locally.';};</script>`,
+  ),
+);
+console.log(
+  'Prepared anonymous task/observation materials and separate facilitator answers. No participants, outreach or model calls.',
+);

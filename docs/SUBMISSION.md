@@ -29,7 +29,7 @@ Working code and selected checks support these claims. Internal reviews are not 
 ## Delivery checklist
 
 - Public website: https://infinite-stadium-lime.vercel.app/?view=watch . Supply the judge access code through the permitted submission field, not this repository.
-- Source: prepare the current clean source publication, verify its parity and publish the approved repository URL. The current local checkout has no configured Git remote.
+- Source: https://github.com/falcon-0/infinite-stadium . The approved source cleanup is merged. Validate any later runtime changes before updating the published source or website.
 - Demo: final Watch-only video, under two minutes, with actual app footage, captions and approved sound. YouTube upload and owner approval remain pending.
 - Availability: verify the configured Azure account, remaining credit and quota through the organizer's judging window.
 - Final form: verify current required fields, links and rules before the owner submits. No final submission has been performed.

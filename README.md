@@ -2,7 +2,7 @@
 
 A football companion that answers questions about the moment you are watching while the match keeps moving.
 
-[Open the demo](https://infinite-stadium-lime.vercel.app/?view=watch) · [Run locally](docs/JUDGE_SETUP.md) · [Architecture and deployment](docs/DEPLOYMENT.md) · [Validation](docs/VALIDATION_PLAN.md)
+[Open the demo](https://infinite-stadium-lime.vercel.app/?view=watch) · [Run locally](docs/JUDGE_SETUP.md) · [Developer guide](docs/CONTRIBUTING.md) · [Architecture and deployment](docs/DEPLOYMENT.md) · [Validation](docs/VALIDATION_PLAN.md)
 
 ## Watch, ask, understand
 
@@ -56,9 +56,9 @@ Tests sit beside their modules. They are retained to make behavior reviewable. O
 
 ## Evidence and practical limits
 
-The current M runtime passed all eight local gates: 1,310 tests passed, one platform skip and zero failures. Six selected native K answers and four selected public L answers passed their recorded review; M retains their backend bytes. The four public examples took 3.283–5.266 seconds. These selected retunes do not establish general accuracy or a latency guarantee. Longer analyses have taken more than 20 seconds and earlier failures are retained in the development record.
+The release passed all eight local gates: 1,333 tests passed, one platform skip and zero failures. Earlier development checks included ten selected successful Azure answers, with four hosted examples taking 3.283–5.266 seconds. These are selected development checks, not a representative accuracy benchmark or a latency guarantee. Later stress tests exposed incomplete answers, extra information, slow requests and local provider connection failures. The corrected French identity follow-up, Spanish turnover question, Portuguese foot lookup and attacking comparison passed their recorded regression checks. These tuned cases remain separate from a representative accuracy benchmark. The current build also passed protected hosted checks for both multilingual turnover questions and retains the current Watch layout. Server-side processing in those two checks took 8.1 and 11.0 seconds; other questions and network conditions vary. Private development traces are retained locally; the compact evidence record below summarizes the public claims and limitations.
 
-See [the compact evidence record](docs/EVALUATION_EVIDENCE.json) and [research](docs/RESEARCH.md). AI interpretation remains fallible, and unavailable intentions, pressing causes or chance quality must not be invented. The short passages do not establish a full-match player award or future winner. Azure availability depends on the configured account, quota and credit. Final video approval, public source publication and judging-period continuity remain separate delivery checks.
+See [the compact evidence record](docs/EVALUATION_EVIDENCE.json) and [research](docs/RESEARCH.md). AI interpretation remains fallible, and unavailable intentions, pressing causes or chance quality must not be invented. The short passages do not establish a full-match player award or future winner. Azure availability depends on the configured account, quota and credit. The public source is available at [falcon-0/infinite-stadium](https://github.com/falcon-0/infinite-stadium). Final video approval and judging-period continuity remain separate delivery checks.
 
 ## Build a clean source handoff
 

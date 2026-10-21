@@ -6,7 +6,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent
 REQUIRED_FILES = (
-    "README.md", "package.json", "requirements-local.txt", "requirements-local-lock.txt",
+    "README.md", "package.json", "package-lock.json", ".prettierrc.json", ".prettierignore", ".gitattributes", "docs/CONTRIBUTING.md", "requirements-local.txt", "requirements-local-lock.txt",
     "index.html", "style.css", "fan-experience.css", "Dockerfile", ".dockerignore",
     ".gitignore", ".env.example", "docs/VALIDATION_PLAN.md", "docs/RESEARCH.md",
     "docs/JUDGE_SETUP.md", "docs/SUBMISSION.md", "docs/DEMO_SCRIPT.md", "docs/DEVELOPMENT_HISTORY.md",
