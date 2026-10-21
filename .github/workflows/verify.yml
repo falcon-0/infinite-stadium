@@ -51,6 +51,12 @@ jobs:
 
       # The default application and packaging tools use standard libraries.
       # The optional local AI SDK/runtime is intentionally not installed here.
+      - name: Install pinned development formatter
+        run: npm ci --ignore-scripts
+
+      - name: Check JavaScript formatting
+        run: npm run format:check
+
       - name: Run Node tests with bounded concurrency
         run: node --test --test-concurrency=4 ./*.test.js
 

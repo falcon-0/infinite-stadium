@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": {"node": "24.x"},
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "start": "node server.js",
     "start:local": "node start-local.js",
@@ -14,6 +16,11 @@
     "probe:local": "node local-agent-cli.js",
     "validate:data": "node fixture-validation-cli.js",
     "evaluate:catalogue": "node catalogue-evaluation-cli.js",
-    "verify:release": "node release-check.js"
+    "verify:release": "node release-check.js",
+    "format": "prettier --write \"*.js\" \"api/*.js\"",
+    "format:check": "prettier --check \"*.js\" \"api/*.js\""
+  },
+  "devDependencies": {
+    "prettier": "3.6.2"
   }
 }
