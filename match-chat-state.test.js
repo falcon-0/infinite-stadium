@@ -486,3 +486,26 @@ test('entity clarification preserves the complete original question rather than 
   });
   assert.equal(state.begin(context, 'M. Costa').payload.clarification.question, question);
 });
+
+test('clarifications and general explanations do not acquire stale match-evidence warnings', () => {
+  const before = questionEvidenceSnapshot([{ id: 'pass', revision: 1, time: 10 }], 30);
+  const records = [{ id: 'pass', revision: 2, time: 10 }];
+  for (const scope of ['clarify', 'general']) {
+    assert.equal(
+      questionEvidenceChanged(
+        { scope, observedAt: 30, evidence: [{ type: 'event', id: 'pass', revision: 1 }] },
+        before,
+        records,
+      ),
+      false,
+    );
+  }
+  assert.equal(
+    questionEvidenceChanged(
+      { scope: 'match', observedAt: 30, evidence: [{ type: 'event', id: 'pass', revision: 1 }] },
+      before,
+      records,
+    ),
+    true,
+  );
+});

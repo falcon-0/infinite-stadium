@@ -489,3 +489,102 @@ test(
     }
   },
 );
+
+test(
+  'resolved player replies display the original evidence pin while playback continues',
+  { skip: !playwright },
+  async () => {
+    const browser = await playwright.chromium.launch({
+      headless: true,
+      ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}),
+    });
+    try {
+      const page = await browser.newPage();
+      const requests = [];
+      await page.route('http://chat-pin.test/**', async (route) => {
+        const pathname = new URL(route.request().url()).pathname;
+        if (pathname === '/api/agent/question') {
+          const request = route.request().postDataJSON();
+          requests.push(request);
+          return route.fulfill({
+            json: {
+              matchId: 'demo',
+              question: request.question,
+              observedAt: 70,
+              language: 'fr',
+              scope: requests.length === 1 ? 'clarify' : 'match',
+              answer: requests.length === 1 ? 'Quel Costa ?' : 'Cole a r�cup�r� le ballon.',
+              provenance: requests.length === 1 ? { source: 'verified-lineup-resolution' } : {},
+              evidence: [{ type: 'event', id: 'pass', revision: 1 }],
+              moments: [],
+              ...(requests.length === 2
+                ? {
+                    questionResolution: {
+                      kind: 'source-lineup-clarification',
+                      question: 'Que fait M. Costa ?',
+                    },
+                  }
+                : {}),
+            },
+          });
+        }
+        if (['/match-chat-ui.js', '/match-chat-state.js'].includes(pathname))
+          return route.fulfill({
+            contentType: 'text/javascript',
+            body: await readFile(new URL('.' + pathname, import.meta.url), 'utf8'),
+          });
+        return route.fulfill({
+          contentType: 'text/html',
+          body: '<html><style>[hidden]{display:none!important}</style><main></main></html>',
+        });
+      });
+      await page.goto('http://chat-pin.test/');
+      await page.evaluate(async () => {
+        const { initializeMatchChat } = await import('/match-chat-ui.js');
+        window.context = {
+          kind: 'sustained',
+          seed: 17,
+          matchId: 'demo',
+          time: 70,
+          language: 'fr',
+          configured: true,
+          provider: 'azure',
+          playing: true,
+          eventRecords: [{ id: 'pass', revision: 1, time: 62, arrivedAt: 62 }],
+        };
+        window.chat = initializeMatchChat({
+          parent: document.querySelector('main'),
+          getContext: () => context,
+        });
+        chat.update();
+      });
+      const ask = async (question) => {
+        await page.locator('#match-question').fill(question);
+        await page.locator('button[type=submit]').click();
+        await page.waitForFunction(() => !document.querySelector('[data-turn-state=pending]'));
+      };
+      await ask('Que fait Costa ?');
+      await page.evaluate(() => {
+        context.time = 100;
+        context.eventRecords.push({ id: 'pass', revision: 2, time: 62, arrivedAt: 90 });
+        chat.update();
+      });
+      assert.equal(await page.locator('[data-turn-correction]').first().isHidden(), true);
+      await ask('M. Costa, celui de Harbour Athletic.');
+      assert.equal(requests[1].time, 100);
+      assert.equal(requests[1].clarification.time, 70);
+      const label = await page
+        .locator('.match-chat-turn')
+        .nth(1)
+        .locator('.disclosure')
+        .first()
+        .innerText();
+      assert.match(label, /Match at 01:10/);
+      assert.doesNotMatch(label, /01:40/);
+      assert.equal(await page.evaluate(() => context.playing), true);
+      assert.equal(await page.locator('.match-chat-response').last().getAttribute('lang'), 'fr');
+    } finally {
+      await browser.close();
+    }
+  },
+);

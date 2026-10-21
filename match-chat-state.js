@@ -20,6 +20,8 @@ export function questionEvidenceSnapshot(records = [], observedAt = Infinity) {
   return latest;
 }
 export function questionEvidenceChanged(answer, before, records = []) {
+  // A request for clarification or general explanation makes no match-evidence claim.
+  if (answer.scope === 'clarify' || answer.scope === 'general') return false;
   const after = questionEvidenceSnapshot(records),
     refs = answer.evidence || [];
   if (

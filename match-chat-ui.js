@@ -244,7 +244,13 @@ export function initializeMatchChat({
         : 'Answer ready.';
       const followAnswer = chatIsNearBottom(transcript);
       turn.dataset.turnState = 'answered';
-      turn.innerHTML = `<p class="disclosure">You asked: ${esc(data.question)}<br>${esc(momentLabel)}</p><div class="match-chat-response">${answerContent(data)}</div>${(data.scope === 'general' && !showSources ? [] : data.notices || []).map((n) => `<p class="disclosure">${esc(n)}</p>`).join('')}${
+      // Identity clarifications can resolve an earlier question while play continues.
+      const answerTime = Number.isFinite(data.observedAt) ? data.observedAt : c.time;
+      const answerMomentLabel =
+        selectedMoment && selectedMoment.time <= answerTime
+          ? `About ${clock(selectedMoment.time)} · evidence through ${clock(answerTime)}`
+          : `Match at ${clock(answerTime)}`;
+      turn.innerHTML = `<p class="disclosure">You asked: ${esc(data.question)}<br>${esc(answerMomentLabel)}</p><div class="match-chat-response">${answerContent(data)}</div>${(data.scope === 'general' && !showSources ? [] : data.notices || []).map((n) => `<p class="disclosure">${esc(n)}</p>`).join('')}${
         showSources
           ? `<details><summary>Answer sources</summary><p>${sourceDescription(data)}</p>${(
               data.lookups || []
