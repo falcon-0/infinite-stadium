@@ -64,14 +64,66 @@ export function classifyConversationOutcome(row){
  return 'application-failed'; // A generic HTTP 502 is not automatically transport.
 }
 
+const parsedCapture=value=>{if(typeof value!=='string')return value;try{return JSON.parse(value);}catch{return null;}};
+function callCapture(call){
+ const response=parsedCapture(call.response);
+ const rawJSON=typeof call.output==='string'?call.output:response?.choices?.[0]?.message?.content;
+ const request=parsedCapture(call.request);
+ const message=request?.messages?.filter(item=>item.role==='user').at(-1);
+ return {rawJSON:typeof rawJSON==='string'?rawJSON:null,value:parsedCapture(rawJSON),
+  payload:parsedCapture(message?.content),schema:call.responseSchema??call.responseFormat??call.schema??request?.response_format?.json_schema?.name??null};
+}
 function draftCandidates(row){
  return (row.calls||[]).flatMap((call,index)=>{
-  let value;try{value=JSON.parse(call.output);}catch{return [];}
-  const draft=value?.draft??value;
-  if(!Array.isArray(draft?.claims)||!draft.claims.length||draft.claims.some(claim=>typeof claim.text!=='string'))return [];
-  return [{callIndex:index,text:draft.claims.map(claim=>claim.text).join(' '),claims:draft.claims,
-   schema:call.responseSchema??call.responseFormat??null,quality:'unreviewed'}];
+  const captured=callCapture(call),draft=captured.value?.draft??captured.value;
+  if(!draft||typeof draft!=='object')return [];
+  const common={callIndex:index,rawJSON:captured.rawJSON,rawValue:captured.value,
+   stage:'raw-writer-output',schema:captured.schema,quality:'unreviewed'};
+  if(Array.isArray(draft.claims)&&draft.claims.length&&draft.claims.every(claim=>typeof claim.text==='string'))
+   return [{...common,text:draft.claims.map(claim=>claim.text).join(' '),claims:draft.claims,format:'legacy-claims'}];
+  const composition=draft.composition;
+  if(!composition||typeof composition!=='object')return [];
+  // Resolve only the catalogue actually supplied to this call. Never rebuild it
+  // from today's runtime, the final answer, another call or a model's own output.
+  const payload=captured.payload;
+  const catalog=payload?.matchFacts??payload?.evidence?.matchFacts;
+  const catalogPath=payload?.matchFacts?'request.user.matchFacts':payload?.evidence?.matchFacts?'request.user.evidence.matchFacts':null;
+  const available=Array.isArray(catalog?.facts);
+  const ids=Array.isArray(composition.factIds)?composition.factIds:null;
+  const selectedFacts=(ids||[]).map((id,selectionIndex)=>{
+   const matches=available?catalog.facts.filter(fact=>fact?.id===id):[];
+   const resolved=typeof id==='string'&&matches.length===1&&typeof matches[0]?.claim?.text==='string';
+   return {selectionIndex,id,resolution:resolved?'resolved':!available?'catalog-unavailable':matches.length>1?'ambiguous-id':matches.length===1?'invalid-fact':'unknown-id',
+    fact:resolved?structuredClone(matches[0]):null};
+  });
+  const paragraph=composition.claim??null;
+  const selectionResolved=ids!==null&&selectedFacts.every(fact=>fact.resolution==='resolved');
+  const simpleMode=['facts','explanation','limitation'].includes(composition.mode);
+  const paragraphValid=paragraph===null||typeof paragraph.text==='string';
+  const claims=selectionResolved&&simpleMode&&paragraphValid?[...selectedFacts.map(fact=>fact.fact.claim),...(paragraph?[paragraph]:[])]:null;
+  return [{...common,format:'composition',composition:structuredClone(composition),selectedFactIds:ids,
+   selectedFacts,generatedParagraph:paragraph,selectionResolution:selectionResolved?'resolved':ids===null?'invalid-selection':'unresolved',
+   catalogProvenance:available?{location:catalogPath,version:catalog.version??null,sourceFingerprint:catalog.sourceFingerprint??null,
+    capturedCatalogHash:evaluationHash(catalog),attestation:'Captured request catalogue; provenance declaration is not independently attested.'}:null,
+   text:claims?claims.map(claim=>claim.text).join(' '):null,claims,
+   rendering:'Exact selected catalogue claims plus untouched generated paragraph only; not application normalization, validation or a canonical answer.',canonicalAnswer:null}];
  });
+}
+function captureEvaluationStages(row){
+ const precheckedCandidates=[],rejectionStages=[];
+ (row.calls||[]).forEach((call,callIndex)=>{
+  const {payload,schema}=callCapture(call);if(!payload||typeof payload!=='object')return;
+  if(schema==='match_answer_review'&&Array.isArray(payload.answer?.claims))precheckedCandidates.push({callIndex,stage:'prechecked-review-input',
+   answer:structuredClone(payload.answer),evidenceHash:payload.evidence?evaluationHash(payload.evidence):null,
+   canonicalFactSelection:payload.canonicalFactSelection??null,quality:'unreviewed',
+   limitation:'Shared-prefix candidate already checked by the application; not an independent baseline or a released answer.'});
+  if(payload.rejectedAnswer!==undefined)rejectionStages.push({callIndex,stage:'repair-request',rejectedAnswer:payload.rejectedAnswer,feedback:payload.feedback??null,
+   attribution:'Rejection observed in repair request; origin is not inferred as independent AI review.'});
+  if(payload.rejectedPlan!==undefined||payload.planningError!==undefined)rejectionStages.push({callIndex,stage:'planning-repair-request',
+   rejectedPlan:payload.rejectedPlan??null,error:payload.planningError??null});
+ });
+ return {precheckedCandidates,rejectionStages,finalCapture:row.answer?{stage:'final-returned',answer:structuredClone(row.answer),quality:'unreviewed'}:null,
+  failureCapture:row.error?{stage:'reported-failure',error:structuredClone(row.error),rejectionOrigin:'unattributed unless separately captured'}:null};
 }
 
 const qualityFields={factuality:['pass','fail','uncertain','not-applicable'],relevance:['pass','fail'],usefulness:['pass','fail'],
@@ -100,7 +152,7 @@ export function scoreConversationReports(plan,reports,{reviews=[]}={}){
    const result={rowId:`${reportHash}:${index}`,reportHash,caseId:row.id,category:expected?.category??null,repeatIndex:repeat??null,
     provenance:report.mode??'unknown',sourceIdentity:report.sourceIdentity??null,identityMatches:Boolean(bound),inputMatches,eligibleForPlannedLiveQuality:eligible,
     outcome:classifyConversationOutcome(row),elapsedMs:Number.isFinite(row.elapsedMs)&&row.elapsedMs>=0?row.elapsedMs:null,
-    input:row.input,answer:row.answer?.answer??null,claims:row.answer?.claims??null,error:row.error??null,review:null,draftCandidates:draftCandidates(row)};
+    input:row.input,answer:row.answer?.answer??null,claims:row.answer?.claims??null,error:row.error??null,review:null,draftCandidates:draftCandidates(row),...captureEvaluationStages(row)};
    rows.push(result);if(slot)slots.set(slot,result);
   });
  }
@@ -127,5 +179,5 @@ export function scoreConversationReports(plan,reports,{reviews=[]}={}){
    humanFactualFailures:runs.filter(r=>r.review?.method==='human'&&r.review.factuality==='fail').length};}),
   rows,reviewTemplate:rows.filter(r=>!r.review).map(r=>({rowId:r.rowId,method:null,reviewer:null,reviewedAt:null,factuality:null,relevance:null,usefulness:null,uncertainty:null,rationale:null})),
   reviewRubric:{...qualityFields,guidance:'Inspect exact received evidence. A concise supported correction or useful limitation may pass usefulness. Unsupported certainty and needless refusal both fail. Score provider failures separately; do not label them hallucinations. Human and automated judgments remain separate.'},
-  limitations:['No model calls or semantic judgments are made by this harness. Generation is not correctness.','Only exact-input real-Azure rows declaring the frozen plan/build/prompt identity enter planned quality summaries; identity declarations are not independently attested.','Legacy, unbound and mock reports remain visible but cannot certify the current build.','Default cases reuse authored fixture families; novel seeds/questions do not establish independent football realism.','Answer variation is descriptive, not an error rate. Human judgments require actual review; automated reviews are not human evidence.','draftCandidates preserves raw pre-review and repair text for a separate contribution audit. Draft-versus-final comparisons are not an independent-system ablation and remain unreviewed here.']};
+  limitations:['No model calls or semantic judgments are made by this harness. Generation is not correctness.','Only exact-input real-Azure rows declaring the frozen plan/build/prompt identity enter planned quality summaries; identity declarations are not independently attested.','Legacy, unbound and mock reports remain visible but cannot certify the current build.','Default cases reuse authored fixture families; novel seeds/questions do not establish independent football realism.','Answer variation is descriptive, not an error rate. Human judgments require actual review; automated reviews are not human evidence.','draftCandidates preserves raw writer JSON and exact selected request-catalogue facts when available, without repairing generated prose or inventing unavailable facts. Prechecked review inputs, repair requests and final results remain separate and unreviewed. Draft-versus-final comparisons share a production prefix, are not an independent-system ablation and establish no quality advantage.']};
 }

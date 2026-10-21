@@ -2,12 +2,22 @@ const key=ref=>`${ref?.type}:${ref?.id}@${ref?.revision}`;
 
 // The planner identifies the requested role; the application selects only an
 // exact, unique result with an existing proof. Semantic review is still required.
-export function directQuestionFacts(packet,manifest,{focus,form,passAccuracyRequested=false}={}){
+export function directQuestionFacts(packet,manifest,{focus,form,explanationTarget,passAccuracyRequested=false}={}){
  const components=packet.requestComponents?.length;
+ if(explanationTarget==='statistic-definition'&&form==='explanation'){
+  const requested=new Set((packet.requestedEvidence||[]).map(source=>key(source.scopeReference)));
+  const definitions=manifest.facts.filter(fact=>fact.proof.kind==='shot-outcome-definition'&&fact.proof.basis==='trusted-event-schema'&&requested.has(key(fact.proof.scope)));
+  if(definitions.length===1)return {scope:'match',composition:{mode:'facts',factIds:[definitions[0].id]},followUp:''};
+  return null;
+ }
  if(components!==1&&!(components===2&&focus==='event-actor'&&form==='fact'))return null;
  const derived=new Set((packet.queryRelations||[]).map(link=>key(link.scopeReference)));
  const queries=(packet.requestedEvidence||[]).filter(source=>!derived.has(key(source.scopeReference)));
  const result=fact=>({scope:'match',composition:{mode:'facts',factIds:[fact.id]},followUp:''});
+ if(components===1&&focus==='score'&&form==='fact'&&queries.length&&queries.every(source=>source.query?.timeFrom===0&&source.query.timeTo===packet.observedAt&&!source.query.timeFromExclusive&&!source.query.timeToExclusive)){
+  const scores=['home','away'].map(side=>manifest.facts.find(fact=>fact.proof.kind==='count'&&fact.proof.metric==='goals'&&fact.proof.subjectId===side&&fact.proof.timeFrom===0&&fact.proof.timeTo===packet.observedAt&&!fact.proof.timeFromExclusive&&!fact.proof.timeToExclusive));
+  if(scores.every(Boolean))return {scope:'match',composition:{mode:'facts',factIds:scores.map(fact=>fact.id)},followUp:''};
+ }
  if(components===1&&passAccuracyRequested&&focus==='player-performance'&&['fact','assessment'].includes(form)&&queries.length===2){
   const resolved=(packet.mentionedPlayerResolution||[]).filter(r=>r.status==='resolved').map(r=>r.canonicalId);
   const filters=queries.map(source=>source.query?.filters||{}),refs=new Set(queries.map(source=>key(source.scopeReference)));

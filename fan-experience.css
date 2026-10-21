@@ -137,7 +137,7 @@
 }
 :is(.fan-view,.studio-view,.developer-view) .investigation:has(#unified-title) .moment-panel .fan-moment-card .fan-moment-card__title {
   margin: 0 0 12px;
-  font-family: system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-family: var(--font-ui);
   font-size: clamp(23px, 2.1vw, 31px);
   line-height: 1.15;
   letter-spacing: -.8px;
@@ -260,7 +260,7 @@
 /* Fan match centre. Original styling guided by the user's dark sports reference. */
 .fan-view { --bg:#0e0f0e; --panel:#1a1b1a; --line:#2c302e; --muted:#a5afa9; --lime:#79c79e; background:var(--bg); color:#f5f6f5; }
 .fan-view .app-sidebar { height:72px; padding:0 28px; gap:24px; background:#151615; border-bottom:1px solid #272a28; }
-.fan-view .app-sidebar .brand { font:700 16px system-ui,-apple-system,'Segoe UI',sans-serif; letter-spacing:-.3px; display:flex; align-items:center; gap:10px; }
+.fan-view .app-sidebar .brand { font:700 16px var(--font-ui); letter-spacing:-.3px; display:flex; align-items:center; gap:10px; }
 .fan-view .app-sidebar .brand::first-letter { color:var(--lime); }
 .fan-view .app-sidebar .view-navigation { align-self:center; gap:8px; }
 .fan-view .app-sidebar .view-navigation a { padding:12px 24px; border-radius:6px; font-size:13px; color:#bbc2be; }
@@ -270,7 +270,7 @@
 .fan-view>main.fan-layout { display:grid; grid-template-columns:200px minmax(0,1fr); gap:24px; align-items:start; }
 .fan-layout>.match-lobby,.fan-layout>.watch-surface,.fan-layout>footer { grid-column:2; min-width:0; }
 .fan-layout>.match-browser { grid-column:1; grid-row:1 / span 2; }
-.fan-view h1,.fan-view h2,.fan-view h3 { font-family:system-ui,-apple-system,'Segoe UI',sans-serif; }
+.fan-view h1,.fan-view h2,.fan-view h3 { font-family:var(--font-ui); }
 .fan-view button { min-height:42px; border-radius:5px; background:var(--lime); border-color:var(--lime); color:#10261b; }
 .fan-view button.secondary,.fan-view select { border-radius:8px; background:#252726; border-color:#3a3f3c; color:#f0f2f1; }
 .fan-view button:hover { filter:brightness(1.08); }
@@ -327,7 +327,7 @@ body.fan-view .investigation.watch-surface:has(#unified-title)>.workspace { grid
 body.fan-view .investigation.watch-surface:has(#unified-title) .workspace .match-score-strip { background:var(--panel); border:0; border-bottom:1px solid var(--line); border-radius:4px 4px 0 0; box-shadow:none; padding:12px 20px; margin:0 0 10px; gap:16px; min-height:88px; }
 body.fan-view .match-score-strip::before,body.fan-view .match-score-strip::after { display:none; }
 body.fan-view .investigation.watch-surface:has(#unified-title) .workspace .score-club { font-size:13px; line-height:1.4; gap:12px; }
-body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre #unified-score { font-family:system-ui,-apple-system,'Segoe UI',sans-serif; font-size:34px; font-weight:700; letter-spacing:1px; line-height:1.2; }
+body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre #unified-score { font-family:var(--font-ui); font-size:34px; font-weight:700; letter-spacing:1px; line-height:1.2; }
 body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre { gap:2px; }
 body.fan-view .investigation.watch-surface:has(#unified-title) .score-centre #unified-clock { background:#181918; color:#c1c8c4; font-size:12px; padding:3px 9px; margin-top:2px; border-radius:6px; }
 body.fan-view .investigation.watch-surface:has(#unified-title) .pitch-legend { gap:14px; font-size:12px; color:#b6bfb9; margin:0; padding:0 0 8px; }
@@ -526,3 +526,6 @@ body.fan-view .player-follow-stats dd{margin:3px 0 0;font-size:20px;font-weight:
  body.fan-view .player-follow-stats dt{font-size:10px}
  body.fan-view .player-follow-stats dd{font-size:12px;margin:0}
 }
+
+/* Use the selected interface font for pitch numbers and player labels. */
+#unified-pitch text { font-family:var(--font-ui); }

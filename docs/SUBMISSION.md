@@ -1,58 +1,37 @@
-# Infinite Stadium submission preparation
+# Submission draft
 
-Updated October 16, 2026. The product now focuses on fans watching a synthetic match and asking questions without stopping playback. Studio has been removed from site navigation; former Studio links open Watch. Older producer demonstrations are historical and must not represent the final product.
+## Pitch
 
-## Project pitch
+Infinite Stadium helps football fans understand the moment they are watching without missing the next play. Ask a question in your own words while a synthetic match continues. The assistant answers against the evidence available at the captured timestamp and offers a route back to the supporting moment.
 
-Infinite Stadium helps football fans understand the match as they watch. Follow a synthetic match, ask a question in your own words, and receive an answer tied to the moment you were watching. The match keeps playing. Azure AI interprets the question, retrieves match evidence and reviews the answer; the application computes supported statistics and ordered events. Fans can change their language, level of detail and player focus.
+## Implemented
 
-## What is built
+The Watch experience combines twenty synthetic fixtures, a schematic replay, compact statistics, timed narratives, open Azure conversation, bounded follow-ups and recaps. Source queries compute supported quantities and event order; a separate model review checks relevance and support. Late corrections and confirmations are handled at their received time. English, Spanish, French and Portuguese content paths support personalization alongside audience detail and club preferences.
 
-- Twenty synthetic fixtures across five authored passage families, with fictional clubs and players.
-- A schematic 22-player replay at fixed 2× demo pace, synchronized score, compact statistics and short contextual insights.
-- Open Azure match conversation with pinned timestamps, bounded follow-up context and explicit event revisions.
-- Received-event queries, server-computed calculations and a separate model reviewer. Incorrect assumptions and unsupported explanations must not become match facts.
-- Personalization and English, Spanish, French and Portuguese match-answer support. Menus and curated general football-rule references still include English.
-- Automatic recorded recaps; AI recap generation is a separate provider request.
-- Vercel Hobby hosting, server-only Azure configuration and Free Upstash shared access sessions and model reservations. No paid account upgrade.
+These are authored two-minute passages with fictional teams and players. There is no licensed match footage, automatic video recognition, full-match player award or calibrated winner prediction. Navigation and some general rule references remain English. Studio is not in the submitted user journey; legacy modules remain in source for reproducibility.
 
-Automatic context, animation and recorded recaps are deterministic. The application is a synthetic-event companion, not licensed Premier League video streaming or video recognition. The legacy producer source remains in the repository for historical reproducibility, but is outside the submitted fan workflow.
+## Five-stage challenge fit
 
-## Judging rubric and evidence
-
-| Criterion | Weight | Evidence and practical limit |
-| --- | --- | --- |
-| Technological implementation | 20% | Reproducible source build, CI on Windows/Linux, browser checks, persistent shared usage guard; long-term model availability still needs securing |
-| Agentic design and innovation | 20% | Question analyst, read-only tools and independent reviewer with bounded repair; role count alone does not prove superiority over one agent |
-| Real-world impact | 20% | Ask during uninterrupted viewing and revisit a pinned moment; real fan validation is still pending |
-| User experience and presentation | 20% | Focused Watch experience, compact stats and optional preferences; final Watch-only recording and owner review pending |
-| Category adherence | 20% | Synthetic events → interpreted facts → explanations → on-screen experience → personalization; category selection still needs owner review |
-
-Latest Watch-only release: all eight local gates passed, 1,085 tests passed and one platform-specific skip. The old Studio-link redirect, responsive Watch layout, multilingual ordinal wording and isolated source-package checks passed. This does not certify broad AI answer quality.
-
-Production checks confirmed health/assets, private-file blocking, login/logout, persistent reservations and terminal SSE. A real scorer question returned A. Reed at 01:56 using two model calls. A later bounded hosted check returned a Spanish scorer, Spanish follow-up assist and a cross-fixture Reed/Mensah correction; it also exposed awkward Spanish ordinal wording, now repaired locally. A malformed one-letter question returned a validation response. Saved reports retain failures and latency; these are developer checks, not independent fan testing or broad accuracy evidence.
-
-The current trial is working. Hosting on Vercel does not extend Azure credits or trial duration. The authorized friend's trial has not been activated, and no account switch is being performed now. Cash remains $0. Continuity through judging is not secured yet.
-
-## Submission links and fields
-
-| Field | Current state |
+| Stage | Implementation |
 | --- | --- |
-| Innovation Studio project | https://innovationstudio.microsoft.com/hackathons/insidethegamedeveloperhackathon/project/126399 — profile exists; final entry not submitted |
-| Public source | https://github.com/falcon-0/infinite-stadium |
-| Website | https://infinite-stadium-lime.vercel.app — AI sign-in instructions belong in the private organizer field |
-| Public demonstration video | YouTube selected; upload pending |
-| Category | Provisional Best Multi-Agent System; demonstrate useful collaboration without unsupported comparative claims |
-| Final source commit | Freeze after the current checks and owner review |
+| Ingest | Synthetic events, metadata and tracking with arrival times and revisions |
+| Interpret | Received-state statistics, event queries and ordered action links |
+| Explain | Supported match facts, contextual interpretation and precise uncertainty |
+| Render | Watch replay, synchronized statistics, short narratives and moment links |
+| Personalize | Audience detail, club preference and supported language content |
 
-The final demo needs a Watch-only recording. Existing mixed Watch/Studio cuts are superseded. Astra is preparing a separate motion preview; captions and original sound effects remain the chosen format, with no voice-over required. Do not fabricate AI responses or shorten genuine response waits. Clearly distinguish an editorial diagram from functioning app footage.
+## Equal-weight judging criteria
 
-## Remaining submission decisions
+Technology: reproducible source, CI, protected public AI and durable model reservations. Agentic design: semantic planning, read-only tools and separate answer review with bounded repair. Impact: ask about a moment while viewing continues. UX: focused Watch layout and optional deeper evidence. Category: the five-stage synthetic-data pipeline above.
 
-1. Complete the Watch-only release and production checks.
-2. Review the final Watch-only video, then upload to YouTube and verify signed-out access.
-3. Run the prepared final-stage fan tasks with actual participants and record their feedback honestly.
-4. Verify model access through judging and test any later authorized account change.
-5. Confirm eligibility, category, final fields and private judge access instructions with the owner; submit only after owner review.
+Working code and selected checks support these claims. Internal reviews are not organizer scores; broad reliability, comparative superiority and measured fan benefit are not established.
 
-Official rules rechecked October 16: https://github.com/microsoft/insidethegamehackathon/blob/main/OFFICIAL%20RULES.md. Submission ends October 27 at 11:59 PM Pacific; judging ends November 10 at 11:59 PM Pacific. The video must be under two minutes, show the functioning project, and have a public URL on YouTube, Vimeo, Facebook Video or Youku. GitHub MP4 downloads are supplemental. A public GitHub repository and working judge access are required. Announcements are due by November 20. No final submission has been made.
+## Delivery checklist
+
+- Public website: https://infinite-stadium-lime.vercel.app/?view=watch . Supply the judge access code through the permitted submission field, not this repository.
+- Source: prepare the current clean source publication, verify its parity and publish the approved repository URL. The current local checkout has no configured Git remote.
+- Demo: final Watch-only video, under two minutes, with actual app footage, captions and approved sound. YouTube upload and owner approval remain pending.
+- Availability: verify the configured Azure account, remaining credit and quota through the organizer's judging window.
+- Final form: verify current required fields, links and rules before the owner submits. No final submission has been performed.
+
+See README, JUDGE_SETUP and EVALUATION_EVIDENCE for implementation and verification details. Do not claim a selectable-player control or fully translated interface without checking the actual current product.

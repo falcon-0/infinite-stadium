@@ -1,4 +1,5 @@
 import {readFile,writeFile} from 'node:fs/promises';
+import {maximumQuestionModelCalls} from './match-question-ai.js';
 import {configuration} from './ai.js';
 import {captureEvaluationIdentity,scoreConversationReports} from './conversational-evaluation.js';
 import {createPersistentModelBudget} from './persistent-budget.js';
@@ -33,7 +34,7 @@ let previousStarted=0;
 for(const item of cases){
  const current=captureEvaluationIdentity();
  if(current.buildFingerprint!==identity.buildFingerprint){report.stopped='Source changed during run';break;}
- const remaining=budget.snapshot();if(remaining.limit-remaining.calls<5){report.stopped='Insufficient allowance for a bounded five-call case';break;}
+ const remaining=budget.snapshot();if(remaining.limit-remaining.calls<maximumQuestionModelCalls){report.stopped='Insufficient allowance for the bounded six-call recovery path';break;}
  const waitMs=Math.max(0,previousStarted+intervalMs-Date.now());if(waitMs)await new Promise(resolve=>setTimeout(resolve,waitMs));
  previousStarted=Date.now();
  const result=await compareWatchWorkflow(item.input,{config,pricing,fetcher:async(url,request)=>{budget.take();return fetch(url,request);},

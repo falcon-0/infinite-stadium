@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {snapshot,explainMoment} from './engine.js';
 import {selectNarratives} from './narratives.js';
 
-const event=(id,time,team='home',type='recovery',result=false)=>({id,time,arrivedAt:time,revision:1,team,type,result,player:id});
+const event=(id,time,team='home',type='recovery',result=false)=>({id,time,arrivedAt:time,revision:1,team,type,result,player:id,...(type==='recovery'?{recoveryKind:'loose-ball'}:{})});
 const shot=event('shot',10,'home','shot');
 function views(events){
  const state=snapshot(10,[...events,shot]);

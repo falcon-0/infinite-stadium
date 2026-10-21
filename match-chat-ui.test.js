@@ -14,6 +14,7 @@ test('chat completion, scrolling and seeking preserve a usable conversation',{sk
    const pathname=new URL(route.request().url()).pathname;
    if(pathname==='/api/agent/question'){
     const request=route.request().postDataJSON();requests.push(request);if(fail)return route.fulfill({status:502,json:{code:'question-withheld'}});if(hold)await new Promise(resolve=>release=resolve);
+    if(request.question==='Explain this chance?')return route.fulfill({json:{scope:'match',matchId:'demo',question:request.question,answer:'The turnover gave them a route towards goal.',observedAt:30,language:'en',claims:[{text:'Northbridge has taken 3 shots.',kind:'observation'},{text:'The turnover gave them a route towards goal.',kind:'interpretation'}],evidence:[],moments:[]}});
     return route.fulfill({json:{matchId:'demo',question:request.question,answer:'Une longue réponse. '.repeat(100),observedAt:30,language:'fr',moments:[{anchorId:'shot',revision:1,time:25,label:'Tir'}],evidence:[{type:'event',id:'shot',revision:1}]}});
    }
    if(['/match-chat-ui.js','/match-chat-state.js'].includes(pathname))return route.fulfill({contentType:'text/javascript; charset=utf-8',body:await readFile(new URL('.'+pathname,import.meta.url),'utf8')});
@@ -72,6 +73,12 @@ test('chat completion, scrolling and seeking preserve a usable conversation',{sk
   assert.equal(requests.at(-1).conversation.some(turn=>turn.question==='Why did he miss?'),false);
   assert.equal(requests.at(-1).language,'es');
   assert.equal(await page.locator('[data-turn-state=failed]').count(),1);
+  await ask('Explain this chance?');
+  const explanation=page.locator('.match-chat-response').last();
+  assert.equal(await explanation.locator(':scope > p').innerText(),'The turnover gave them a route towards goal.');
+  assert.equal(await explanation.getByText('Northbridge has taken 3 shots.',{exact:true}).isVisible(),false);
+  await explanation.getByText('Match detail',{exact:true}).click();
+  assert.equal(await explanation.getByText('Northbridge has taken 3 shots.',{exact:true}).isVisible(),true);
   await page.locator('#match-question').fill('Old fixture draft');
   await page.evaluate(()=>{context={...context,matchId:null};chat.update();});
   assert.equal(await page.locator('#match-question').inputValue(),'Old fixture draft');
@@ -136,5 +143,24 @@ test('explicit transient retry keeps its original moment and leaves a newer draf
   await page.evaluate(()=>{context={...context,configured:true,seed:18,matchId:'another'};chat.update();});
   assert.equal(await page.locator('[data-chat-retry]').count(),0);
   assert.equal(await page.locator('.match-chat-turn').count(),0);
+ }finally{await browser.close();}
+});
+
+
+test('a specific uncertainty keeps the separately requested ball winner visible',{skip:!playwright},async()=>{
+ const browser=await playwright.chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
+ try{
+  const page=await browser.newPage();
+  await page.route('http://chat-coverage.test/**',async route=>{
+   const pathname=new URL(route.request().url()).pathname;
+   if(pathname==='/api/agent/question')return route.fulfill({json:{scope:'match',matchId:'demo',question:route.request().postDataJSON().question,answer:"Mensah's pass at 00:18 was unsuccessful. M. Costa won the ball next at 00:20. I cannot tell whether Cole was ready.",observedAt:28,language:'en',claims:[{kind:'observation',text:"Mensah's pass at 00:18 was unsuccessful."},{kind:'observation',text:'M. Costa won the ball next at 00:20.'},{kind:'limitation',text:"I cannot tell whether Cole was ready or whether that caused the pass to fail."}],evidence:[],moments:[]}});
+   if(['/match-chat-ui.js','/match-chat-state.js'].includes(pathname))return route.fulfill({contentType:'text/javascript; charset=utf-8',body:await readFile(new URL('.'+pathname,import.meta.url),'utf8')});
+   return route.fulfill({contentType:'text/html',body:'<html><main></main></html>'});
+  });
+  await page.goto('http://chat-coverage.test/');
+  await page.evaluate(async()=>{const {initializeMatchChat}=await import('/match-chat-ui.js');const context={kind:'counter',seed:2403,matchId:'demo',language:'en',time:28,configured:true,provider:'azure',eventRecords:[]};initializeMatchChat({parent:document.querySelector('main'),getContext:()=>context}).update();});
+  await page.locator('#match-question').fill("Was Cole not ready, and who got the ball next?");await page.locator('button[type=submit]').click();await page.waitForSelector('[data-turn-state=answered]');
+  assert.equal(await page.locator('.match-chat-response p').count(),3);assert.equal(await page.locator('.match-chat-response details').count(),0);
+  assert.match(await page.locator('.match-chat-response').innerText(),/M. Costa won the ball next at 00:20/);assert.equal(await page.locator('.match-chat-response p').filter({hasText:'M. Costa'}).isVisible(),true);
  }finally{await browser.close();}
 });

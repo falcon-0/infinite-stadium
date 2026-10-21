@@ -1,4 +1,4 @@
-import {answerMatchQuestionAI} from './match-question-ai.js';
+import {answerMatchQuestionAI,maximumQuestionModelCalls} from './match-question-ai.js';
 import {evaluationHash} from './conversational-evaluation.js';
 
 const copy=value=>structuredClone(value);
@@ -27,7 +27,7 @@ export async function compareWatchWorkflow(input,{config,fetcher,canRepair=()=>f
  validatePricing(pricing);
  const started=clock(),calls=[],reviewBoundaries=[];let baseline=null,full=null,error=null;
  const observedFetch=async(url,options)=>{
-  if(calls.length>=5)throw new Error('Comparison exceeded its five-call execution ceiling.');
+  if(calls.length>=maximumQuestionModelCalls)throw new Error('Comparison exceeded its bounded execution ceiling.');
   const request=JSON.parse(options.body),schema=request.response_format?.json_schema?.name??null;
   // Persist only the model payload. URL, authentication headers and key are
   // deliberately excluded from both successful and failed trace records.

@@ -19,7 +19,7 @@ function withoutReferences(value){
  * The fingerprint identifies the full source, independently of answer selection. */
 export function projectReviewEvidence(packet,answer){
  const projected={sourceFingerprint:createHash('sha256').update(JSON.stringify(canonical(packet))).digest('hex')};
- for(const name of ['question','requestedForm','explanationTarget','answerFocus','previousQuestion','conversation','responseLanguage','language','roster','teams','score','coordinateSystem','mentionedPlayerResolution','requestedMoment','pendingOutcomeContext','timeUnit','observedAt','observedClock','currentTime','limits','evidenceCapabilities']){
+ for(const name of ['question','requestedForm','explanationTarget','answerFocus','previousQuestion','conversation','responseLanguage','language','roster','teams','score','coordinateSystem','mentionedPlayerResolution','requestedMoment','conversationActionAnchor','pendingOutcomeContext','timeUnit','observedAt','observedClock','currentTime','limits','evidenceCapabilities']){
   if(packet[name]!==undefined)projected[name]=copy(packet[name]);
  }
  if(packet.evidenceCapabilities)projected.evidenceCapabilities=withoutReferences(packet.evidenceCapabilities);
@@ -55,15 +55,16 @@ export function projectReviewEvidence(packet,answer){
   limitation:'Cited current records and one-hop explicit dependencies only; not a complete event inventory. Links establish sequence, not causation or assist credit.'};
  projected.unavailableReferences=missing;
  const contributions=packet.playerContributions;
+ const narrowFact=packet.requestedForm==='fact'&&['score','event-actor','credited-assist'].includes(packet.answerFocus);
  projected.relevanceContext={citable:false,limitation:'Summaries help detect omitted information and false premises. They do not authorize uncited match assertions.'};
- if(contributions)projected.relevanceContext.playerContributions={...withoutReferences(contributions),metrics:(contributions.metrics||[]).map(metric=>({
+ if(contributions&&!narrowFact)projected.relevanceContext.playerContributions={...withoutReferences(contributions),metrics:(contributions.metrics||[]).map(metric=>({
   name:metric.name,parts:(metric.evidence||[]).map(ref=>{
    const query=scopes.get(key(ref));
    if(!query)return {unavailable:true};
    const {query:definition,count,groups,scope,truncated,entityResolution,matchedGroupCount}=query;
    return withoutReferences({query:definition,count,groups,scope,truncated,entityResolution,matchedGroupCount});
   })}))};
- for(const name of ['namedPlayerActions','recentComparison','assessmentDimensions','shotTimeline'])if(packet[name]!==undefined)projected.relevanceContext[name]=withoutReferences(packet[name]);
+ for(const name of (narrowFact?(packet.answerFocus==='score'?[]:['shotTimeline']):['namedPlayerActions','recentComparison','assessmentDimensions','shotTimeline']))if(packet[name]!==undefined)projected.relevanceContext[name]=withoutReferences(packet[name]);
  return projected;
 }
 
@@ -72,6 +73,7 @@ export function matchEvidenceCapabilities(packet){
  const recoveries=[...new Map(rows.filter(row=>row.type==='recovery').map(row=>[key({...row,type:'event'}),row])).values()];
  return {
   supported:['received event actor, time and explicitly recorded result','counts only within the cited query scope and coverage'],
+  unavailableMeasurements:['possession','pressing','xG','readiness'],
   unavailable:['who forced a mistake or turnover','player intention','measured pressing or possession duration','verified open passing lanes'],
   eventLinks:'cause/passId/shotId connect recorded actions, not pressure attribution; a recovery identifies who collected the ball, not who forced the preceding loss',
   recoveries:recoveries.map(row=>({reference:{type:'event',id:row.id,revision:row.revision},recoveringPlayer:row.player??null,time:row.time,linkedPriorEvent:row.cause??row.passId??row.shotId??null,forcingPlayer:null}))
@@ -106,18 +108,28 @@ export function claimEvidenceChecks(answer,packet){
 // It is independent of question wording and is not a multilingual entailment
 // checker. Unknown/negative explanations of the same concept remain allowed.
 const causal= /\b(?:forc(?:e|ed|es|ing)|caus(?:e|ed|es|ing)|induc(?:e|ed|es|ing)|provok(?:e|ed|es|ing))\b[^.!?;]{0,90}\b(?:turnover|mistake|error|loss of possession|failed pass|unsuccessful pass)\b/gi;
-const negative=/\b(?:not|never|neither|cannot|can't|couldn't|didn't|doesn't|don't|unknown|unclear|unrecorded|unavailable)\b|\b(?:no evidence|no record|whether|who|what)\b[^.!?;]{0,45}$/i;
+function causalPredicateNegated(prefix){
+ const local=prefix.replace(/\bnot\s+(?:only|just|merely)\b/gi,'');
+ // Negation must belong to the causal predicate or to an explicit statement
+ // that its attribution cannot be known. An unrelated negated clause cannot
+ // license an affirmative causal assertion later in the sentence.
+ if(/\b(?:not|never|cannot|can['’]t|couldn['’]t|didn['’]t|doesn['’]t|don['’]t)\s+(?:(?:directly|necessarily|clearly|actually|really|personally)\s+){0,2}$/i.test(local))return true;
+ if(/\b(?:cannot|can['’]t|couldn['’]t|do not|does not|did not|don['’]t|doesn['’]t|didn['’]t)\s+(?:tell|say|know|show|establish|determine|prove)\s+(?:(?:who|what|whether|if|that)\s+)?(?:[\p{L}\p{N}.'’_-]+\s+){0,4}$/iu.test(local))return true;
+ if(/\b(?:is|was|remains)\s+not\s+(?:known|clear|recorded|established|available)\s+(?:(?:who|what|whether|if|that)\s+)?(?:[\p{L}\p{N}.'’_-]+\s+){0,3}$/iu.test(local))return true;
+ if(/\b(?:is|was|remains)\s+(?:unknown|unclear|unrecorded|unavailable)\s+(?:(?:who|what|whether|if|that)\s+)?(?:[\p{L}\p{N}.'’_-]+\s+){0,3}$/iu.test(local))return true;
+ return /\bno\s+(?:evidence|record)\s+(?:(?:shows|proves|establishes|of|that|whether|who)\s+)?(?:[\p{L}\p{N}.'’_-]+\s+){0,3}$/iu.test(local);
+}
 
 export function unsupportedCausalClaims(answer){
  const issues=[];
  for(const [claimIndex,claim] of answer.claims.entries()){
   if(claim.kind==='general'&&!claim.evidence.length)continue;
-  for(const match of claim.text.matchAll(causal)){
+  for(const match of claim.text.matchAll(new RegExp(`(?=(${causal.source}))`,causal.flags))){
    // Bound negation to the local clause, so a later disclaimer cannot excuse
    // an earlier positive causal assertion.
-   const prefix=claim.text.slice(0,match.index).split(/[.!?;]|\bbut\b|\bhowever\b/i).at(-1);
-   const suffix=claim.text.slice(match.index+match[0].length).split(/[.!?;]|\bbut\b|\bhowever\b/i)[0];
-   if(negative.test(prefix)||/^\s+(?:is|was|remains)\s+(?:unknown|unclear|unrecorded|not recorded)\b/i.test(suffix))continue;
+   const prefix=claim.text.slice(0,match.index).split(/[.!?;,]|\b(?:but|however|and|while|when|before|after|then)\b/i).at(-1);
+   const suffix=claim.text.slice(match.index+match[1].length).split(/[.!?;]|\bbut\b|\bhowever\b/i)[0];
+   if(causalPredicateNegated(prefix)||/^\s+(?:is|was|remains)\s+(?:unknown|unclear|unrecorded|not recorded)\b/i.test(suffix))continue;
    issues.push({claimIndex,code:'unsupported-causal-attribution',reason:'The received schema records actions and links, but does not attribute who forced the preceding error.'});
    break;
   }
@@ -273,7 +285,19 @@ function countSubject(packet,answer,claimIndex,span){
   const previous=answer.claims.slice(0,claimIndex).at(-1)?.text??packet.conversation?.at(-1)?.answer??'';
   candidates=contextIds(previous);
  }
- return {id:candidates.length===1?candidates[0]:null,ambiguous:candidates.length>1,explicit,pronoun:/\b(?:he|she|his|her|they|their)\b/i.test(prefix)};
+ // Shot quantities faced by a named side/keeper belong to the opposing
+ // attacking side. Only explicit facing/tested grammar licenses this inversion;
+ // a keeper's own saves, recoveries or shots retain their original subject.
+ let opposingFacing=false;
+ if(candidates.length===1&&Object.hasOwn(packet.teams||{},candidates[0])&&/^(?:shots?|attempts?)$/.test(span.noun)){
+  const teamHit=hits.filter(hit=>hit.id===candidates[0]&&hit.at===latest)[0];
+  const predicate=teamHit?prefix.slice(teamHit.end):'';
+  const directFacing=/^\s*(?:['’]s\s+(?:keeper|goalkeeper|goalie|goal)\s+|\s+)(?:(?:has|have|had|is|was|been|being)\s+)*(?:faced|faces|facing|tested\s+(?:with|by))\s*$/iu.test(predicate);
+  const ownGoalFacing=/^\s+(?:keeper|goalkeeper|goalie)\s+(?:has|have|had)\s+been\s+(?:needed|tested|challenged)\s+more\s+(?:as|because)\s+(?:their|its)\s+goal\s+(?:has|have|had)\s+faced\s*$/iu.test(predicate);
+  const participleFacing=/^\s*(?:['’]s\s+)?(?:keeper|goalkeeper|goalie)\s+(?:has|have|had)\s+been\s+(?:needed|tested|challenged)\s+more\s*,?\s*facing\s*$/iu.test(predicate);
+  if(directFacing||ownGoalFacing||participleFacing){candidates=[candidates[0]==='home'?'away':'home'];opposingFacing=true;}
+ }
+ return {id:candidates.length===1?candidates[0]:null,ambiguous:candidates.length>1,explicit,opposingFacing,pronoun:/\b(?:he|she|his|her|they|their)\b/i.test(prefix)};
 }
 // Conservative English window binding; unsupported temporal phrases fail closed
 // instead of letting a recent subset establish a full-passage quantity.
@@ -512,6 +536,22 @@ export function completeNumericReview(review,answer,packet){
  for(const check of completed.checks){
   const claim=checks[check.claimIndex];
   if(!claim||claim.kind==='general'||!Array.isArray(check.counts)||(packet.mentionedPlayerResolution||[]).some(entity=>entity.status!=='resolved'))continue;
+  // Null is an omitted group, not an explicitly selected opposing group.
+  // Complete only a uniquely named, source-proved binding. Keep the text,
+  // quantity, scope and semantic reviewer decision unchanged.
+  for(const [bindingIndex,count] of check.counts.entries()){
+   if(count.groupKey!==null)continue;
+   const spans=countClaimSpans(claim.text).filter(span=>span.text===count.text&&span.value===count.value);
+   if(spans.length!==1)continue;
+   const span=spans[0],subject=countSubject(packet,answer,check.claimIndex,span);
+   if(!subject.explicit||subject.ambiguous||!subject.id||subject.pronoun&&!subject.opposingFacing||countDifference(packet,claim.text,span))continue;
+   const source=claim.cited.find(item=>item.reference.type==='scope'&&key(item.reference)===key(count.scopeReference||{}))?.record;
+   if(!['by-team','by-player','by-assister'].includes(source?.query?.aggregate))continue;
+   const trial=structuredClone(check);trial.counts[bindingIndex].groupKey=subject.id;
+   if(reviewCountIssues({checks:[trial]},answer,packet).some(issue=>issue.span===span.text))continue;
+   count.groupKey=subject.id;
+   augmentations.push({claimIndex:check.claimIndex,span:span.text,index:span.index,value:span.value,scopeReference:structuredClone(count.scopeReference),groupKey:subject.id,reason:'verified-omitted-group-binding'});
+  }
   for(const span of countClaimSpans(claim.text)){
    if(!Number.isSafeInteger(span.value)||span.value<0||countDifference(packet,claim.text,span)||
     check.counts.some(count=>typeof count.text==='string'&&claim.text.includes(count.text)&&count.text.includes(span.text)))continue;
@@ -705,7 +745,7 @@ export function unsupportedMeasurementClaims(answer,packet={}){
    for(const match of [...clause.matchAll(unavailable),...(unsupportedDominance?[...clause.matchAll(unsupportedDominance)]:[])]){
     const before=clause.slice(0,match.index),after=clause.slice(match.index+match[0].length);
     const denied=deniedPrefix.test(before)||deniedEnumeration.test(clause.slice(0,match.index+match[0].length))||(claim.kind==='limitation'&&/\b(?:not|no|cannot|can't|unknown|unavailable|unrecorded|unclear|whether|without|doesn't|didn't)\b[^.!?;]*$/i.test(before));
-    if(!denied&&!/^\s+(?:(?:intensity|duration|control|measurements?|data)\s+){0,3}(?:is|are|was|were|remains?)\s+(?:unknown|unmeasured|unavailable|not recorded)\b/i.test(after)){
+    if(!denied&&!/^\s+(?:(?:intensity|duration|control|percentage|rate|measurements?|data)\s+){0,3}(?:is|are|was|were|remains?)\s+(?:(?:currently|yet)\s+)?(?:unknown|unmeasured|unavailable|not (?:(?:currently|yet) )?(?:recorded|measured|available|known))\b/i.test(after)){
      violation={span:match[0],attribute:/^(?:chose|chooses|choosing|choice|decided|decides|deciding|decision|panicked)$/i.test(match[0])?'intention':'unmeasured-attribute'};return true;
     }
    }
@@ -715,14 +755,98 @@ export function unsupportedMeasurementClaims(answer,packet={}){
  });
 }
 
+// Narrow English supplement to the reviewer's semantic extraction. The current
+// event contract has no blocker identity, pre-keeper path or physical workload
+// fields. Outcome buckets cannot establish those mechanisms (or their absence).
+export function unsupportedShotOutcomeMechanisms(answer,packet={}){
+ if(answer.scope==='general')return [];
+ const blocked='\\bblocked\\s+(?:shot\\s+)?(?:attempts?|shots?)\\b';
+ const recorded='\\b(?:these|those|the recorded|the)\\s+(?:blocked\\s+)?(?:shot\\s+)?(?:attempts?|shots?)\\b';
+ const keeper='(?:goalkeeper|keeper|goalie)';
+ const workload=new RegExp(blocked+'[^.!?;]{0,100}?\\b(?:(?:do|does|did)\\s+not|don[’\x27]t|doesn[’\x27]t|never)\\s+(?:represent|count(?:\\s+as)?|involve|require|constitute)|'+blocked+'[^.!?;]{0,100}?\\b(?:mean|represent|require|involve)\\s+no\\b','gi');
+ const passive=new RegExp(recorded+'[^.!?;]{0,50}?\\b(?:were|was|are|is)\\s+blocked\\s+by\\s+[^.!?;]{1,70}','gi');
+ const names=(packet.roster||[]).map(player=>player.name).filter(Boolean).map(name=>name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+ const active=new RegExp('\\b(?:defenders?|other players?'+(names.length?'|'+names.join('|'):'')+')\\s+(?:have\\s+|had\\s+)?blocked\\s+(?:these|those|the recorded|the)\\s+(?:shot\\s+)?(?:attempts?|shots?)\\b','gi');
+ const path=new RegExp('(?:'+blocked+'|'+recorded+')[^.!?;]{0,100}?\\b(?:before\\s+(?:reaching|getting to)|never\\s+reached)\\s+(?:the\\s+)?'+keeper+'\\b','gi');
+ const uncertainty=/\b(?:(?:cannot|can't|could not|couldn't|do not|does not)\s+(?:tell|know|establish|measure|prove|determine)|(?:unknown|unclear|unrecorded)\s+(?:whether|if)|not\s+(?:true|established)\s+that)\b[^.!?;]*$/i;
+ const issues=[];
+ for(const [claimIndex,claim] of (answer.claims||[]).entries()){
+  for(const clause of String(claim.text||'').split(/(?<=[.!?;])\s+|\bbut\b|\bhowever\b/i)){
+   const matches=[...clause.matchAll(passive),...clause.matchAll(active),...clause.matchAll(path)].map(match=>({match,attribute:'unrecorded-block-mechanism'}));
+   for(const match of clause.matchAll(workload)){
+    const predicate=clause.slice(match.index+match[0].length);
+    if(new RegExp('\\b'+keeper+'(?:[’\x27]s)?\\b','i').test(predicate)&&/\b(?:work|effort)\b/i.test(predicate))matches.push({match:{...match,0:clause.slice(match.index)},attribute:'physical-keeper-workload'});
+   }
+   const found=matches.find(({match})=>!uncertainty.test(clause.slice(0,match.index))&&!/^\s+(?:is|remains)\s+(?:unknown|unrecorded|unclear)\b/i.test(clause.slice(match.index+match[0].length)));
+   if(found){issues.push({claimIndex,attribute:found.attribute,assertion:found.match[0].trim(),reason:'The outcome bucket does not record who blocked the shot, its path relative to the keeper, or physical keeper work. Keep the save-count distinction or explicitly state that the physical detail is unknown.'});break;}
+  }
+ }
+ return issues;
+}
+
 // A recent statistic cannot support an unqualified whole-match conclusion.
 // Compare query predicates, not wording-derived team names or inferred values.
-export function unsupportedAssessmentWindows(answer,packet){
+/** A side's shooting activity says nothing about its own keeper being tested.
+ * Reject explicit contradictions against cited, complete opposition counts.
+ * This is a narrow contradiction guard, not a semantic approval mechanism.
+ */
+export function unsupportedGoalkeeperTesting(answer,packet){
+ const now=packet.observedAt??packet.currentTime,issues=[];
+ const teams=packet.teams||{};
+ for(const [claimIndex,claim] of (answer.claims||[]).entries()){
+  if(!['observation','interpretation'].includes(claim.kind))continue;
+  const text=claim.text||'';
+  // Saved-shot outcomes and goalkeeper-hold collections are not an exhaustive
+  // personal-save ledger. Do not upgrade their comparison into save credit.
+  const saveComparison=/\b(?:saved\s+(?:more|fewer)|(?:made|has|had|with)\s+(?:more|fewer)\s+saves|(?:more|fewer)\s+saves|(?:m[aá]s|menos)\s+paradas|(?:plus|moins)\s+d['’]arr[eê]ts|(?:mais|menos)\s+defesas)\b/iu;
+  const uncertain=/\b(?:cannot|can't|does not|doesn't|do not|don't|not establish|not mean|unclear|unknown|whether|no demuestra|no significa|ne prouve|ne signifie|n[aã]o demonstra|n[aã]o significa|no sabemos si|no se sabe|no est[aá] claro|on ne sait pas si|nous ne savons pas si|n[aã]o sabemos se|n[aã]o se sabe)\b/i;
+  for(const sentence of text.replace(/\b(\p{Lu})\.(?=\s*\p{L})/gu,'$1\uE000').replace(/\b(?:and|y|et|e)\s+(?=\p{Lu}|he\b|she\b|they\b|il\b|elle\b|él\b|ele\b|the\b)/gu,(join,index,whole)=>{
+    // 'whether Kerr and Carter ...' is one coordinated subject, whereas
+    // 'who was better and Kerr made ...' starts an independent assertion.
+    // Keep shared uncertainty only over a name-only complement tail.
+    const subjectTail=/\b(?:whether|if|si|se|mean|establish|determine)\s+(?:\p{Lu}[\p{L}\uE000.'’-]*)(?:\s+(?:(?:and|y|et|e)\s+)?\p{Lu}[\p{L}\uE000.'’-]*)*\s*$/u;
+    return subjectTail.test(whole.slice(0,index))?join:';';
+   }).split(/[.!?;]|\b(?:but|however|whereas)\b/i)){
+   const match=sentence.match(saveComparison);
+   if(match&&!uncertain.test(sentence.slice(0,match.index))){issues.push({claimIndex,attribute:'personal-save-credit',assertion:match[0],reason:'Saved-shot collections and shots faced do not establish comparative personal save totals. Describe the recorded collections and qualify workload versus ability; do not claim who made more saves.'});break;}
+  }
+  if(!/\b(?:keeper|goalkeeper|goalie)\b/i.test(text))continue;
+  for(const clause of text.split(/\b(?:while|whereas|but)\b|[.!?;]/i)){
+   const predicate=clause.match(/\b(?:keeper|goalkeeper|goalie)\b[^.!?;]{0,50}?\b(?:(has|have|had)\s+)?(?:(not|never)\s+)?(?:been\s+)?(?:tested|challenged)\b/i);
+   if(!predicate||/\b(?:unknown|unclear|whether|cannot|can't|does not establish|do not establish)\b/i.test(clause))continue;
+   const prefix=clause.slice(0,predicate.index),named=Object.entries(teams).filter(([,name])=>prefix.toLowerCase().includes(String(name).toLowerCase()));
+   // A literal player may bind the side; never infer a keeper from shirt number.
+   const namedPlayers=(packet.roster||[]).filter(player=>player.name&&prefix.toLowerCase().includes(player.name.toLowerCase()));
+   const sides=[...new Set([...named.map(([side])=>side),...namedPlayers.map(player=>player.team)].filter(side=>['home','away'].includes(side)))];
+   if(sides.length!==1)continue;
+   const defending=sides[0],attacking=defending==='home'?'away':'home';
+   const cited=new Set((claim.evidence||[]).map(key));
+   const scopes=(packet.queryResults||[]).filter(source=>cited.has(key(source.scopeReference))&&source.truncated===false&&source.query?.timeFrom===0&&source.query?.timeTo===now&&!source.query.timeFromExclusive&&!source.query.timeToExclusive&&source.query.aggregate==='by-team'&&source.query.filters?.type==='shot'&&source.query.filters?.outcome==='on-target'&&Object.keys(source.query.filters).every(field=>['type','outcome','team'].includes(field))&&(!source.query.filters.team||source.query.filters.team===attacking)&&source.scope?.missingFields&&Object.values(source.scope.missingFields).every(n=>n===0)&&Array.isArray(source.groups)&&Number.isSafeInteger(source.count)&&source.count>=0&&source.groups.every(group=>['home','away'].includes(group.key)&&Number.isSafeInteger(group.count)&&group.count>=0)&&new Set(source.groups.map(group=>group.key)).size===source.groups.length&&source.groups.reduce((sum,group)=>sum+group.count,0)===source.count);
+   const values=[...new Set(scopes.map(source=>source.groups?.find(group=>group.key===attacking)?.count??0))];
+   if(values.length!==1||!Number.isSafeInteger(values[0]))continue;
+   const denied=!!predicate[2];
+   if(denied&&values[0]>0||!denied&&values[0]===0)issues.push({claimIndex,reason:'Goalkeeper testing must follow the opposing side’s on-target attempts, not the defending team’s own shooting.',defendingTeam:defending,attackingTeam:attacking,oppositionShotsOnTarget:values[0]});
+  }
+ }
+ return issues;
+}
+
+export function unsupportedAssessmentWindows(answer,packet,{canonicalFactSelection}={}){
  const metric=query=>JSON.stringify({aggregate:query.aggregate,filters:Object.fromEntries(Object.entries(query.filters||{}).sort(([a],[b])=>a.localeCompare(b)))});
  return claimEvidenceChecks(answer,packet).flatMap(check=>{
   const claim=answer.claims[check.claimIndex];
   if(claim.kind!=='interpretation'||!/\b(?:overall|so far in (?:the |this )?match|throughout (?:the |this )?match)\b/i.test(claim.text))return [];
   const scopes=check.cited.map(item=>item.record).filter(record=>record?.type==='scope'&&record.query);
+  // A denial that a measured comparison establishes overall ability is not
+  // an assertion of match-wide performance. Require the exact canonical basis,
+  // not an arbitrary nearby count, before distinguishing that negative clause.
+  const negativeMeasurement=claim.text.trim().match(/^(?:however,?\s+)?(?:this|that|these (?:counts|metrics|measures))\s+(?:alone\s+)?(?:is|are)\s+not\s+(?:enough|sufficient)\s+to\s+(?:conclude|establish|determine|prove)\b[^.!?]+[.!?]$/i);
+  const dependencies=(answer.claimDependencies||[]).filter(link=>link.claimIndex===check.claimIndex).flatMap(link=>link.observationIndices||[]);
+  if(negativeMeasurement&&!countClaimSpans(claim.text).length&&!/\b(?:but|yet|nevertheless)\b/i.test(claim.text)&&dependencies.some(index=>{
+   const proof=canonicalFactSelection?.proofs?.[index];
+   return Number.isInteger(index)&&index>=0&&index<check.claimIndex&&answer.claims[index]?.kind==='observation'&&proof?.kind==='team-comparison'&&proof.modelGenerated===false&&proof.assessmentBounds==='this-measure-only'&&proof.operands?.length===2&&proof.operands.every(operand=>
+    (answer.claims[index].evidence||[]).some(ref=>key(ref)===key(operand.scope))&&check.cited.some(({reference,record:source})=>reference.type==='scope'&&key(reference)===key(operand.scope)&&source?.truncated===false&&source.query.timeFrom===proof.timeFrom&&source.query.timeTo===proof.timeTo&&!Object.values(source.scope?.missingFields||{}).some(n=>n>0)));
+  }))return [];
   const recent=scopes.filter(record=>record.query.timeFrom>0);
   const missing=recent.filter(record=>!scopes.some(full=>full.query.timeFrom===0&&full.query.timeTo===packet.observedAt&&!full.query.timeFromExclusive&&!full.query.timeToExclusive&&metric(full.query)===metric(record.query)));
   return missing.length?[{claimIndex:check.claimIndex,reason:'This whole-match assessment relies on a restricted-window metric without the matching full-window evidence. Keep the conclusion within that window or select complete evidence for the requested match-wide comparison.'}]:[];

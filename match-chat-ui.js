@@ -1,6 +1,17 @@
 import {createMatchConversation, questionFailureMessage, questionCanRetry, matchAssistantStatus,questionEvidenceSnapshot,questionEvidenceChanged,chatIsNearBottom,answerMomentLinks} from './match-chat-state.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clock=t=>`${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}`;
+function answerContent(data){
+ const claims=data.claims||[];
+ if(!claims.length)return `<p>${esc(data.answer)}</p>`;
+ const paragraphs=items=>items.map(claim=>`<p>${esc(claim.text)}</p>`).join('');
+ const explanations=claims.filter(claim=>['interpretation','limitation'].includes(claim.kind));
+ const observations=claims.filter(claim=>claim.kind==='observation');
+ // A limitation does not replace a separately requested factual answer.
+ // Only analysis leads with its interpretation and collapses supporting detail.
+ if(data.scope==='match'&&claims.some(claim=>claim.kind==='interpretation')&&observations.length)return `${paragraphs(explanations)}<details class="match-chat-facts"><summary>Match detail</summary>${paragraphs(observations)}</details>`;
+ return paragraphs(claims);
+}
 const sourceDescription=data=>{
  if(data.provenance?.source==='verified-facts-with-ai-analysis')return data.provenance.modelGenerated?'Application-rendered match facts with AI-written interpretation. A model checked relevance; source references support the facts.':'AI-selected match facts rendered by the application. A model checked relevance.';
  if(data.provenance?.source==='verified-rule-facts')return 'AI-selected English rule references. The application copies the sourced wording; a model checked relevance.';
@@ -83,7 +94,7 @@ export function initializeMatchChat({parent,getContext,showSources=false,allowRe
    }
    const data=await response.json();if(id!==requestId)return;await waitForReceivedMatch(controller.signal);if(id!==requestId||scope!==key(getContext()))return;
    if(!conversation.accept(request,getContext(),data))return;result=data;q('[data-chat-status]').textContent=showSources?`${data.provenance?.modelGenerated?(data.scope==='general'?'Football explainer':'AI match analysis'):data.provenance?.aiInterpreted?'AI-assisted answer':'Recorded match answer'} · received through ${clock(data.observedAt)}`:'Answer ready.';
-   const followAnswer=chatIsNearBottom(transcript);turn.dataset.turnState='answered';turn.innerHTML=`<p class="disclosure">You asked: ${esc(data.question)}<br>${esc(momentLabel)}</p><div class="match-chat-response">${data.claims?.length?data.claims.map(c=>`<p>${esc(c.text)}</p>`).join(''):`<p>${esc(data.answer)}</p>`}</div>${(data.scope==='general'&&!showSources?[]:data.notices||[]).map(n=>`<p class="disclosure">${esc(n)}</p>`).join('')}${showSources?`<details><summary>Answer sources</summary><p>${sourceDescription(data)}</p>${(data.lookups||[]).map(l=>`<p>${esc(l.count)} matching events / ${clock(l.scope.timeFrom)} to ${clock(l.scope.timeTo)}<br>Filters: ${esc(Object.entries(l.query.filters||{}).map(([k,v])=>`${k}: ${v}`).join(', ')||'all received events')}</p>`).join('')}<ul>${(data.evidence||[]).map(e=>`<li>${esc(e.type)}: ${esc(e.id)} / v${esc(e.revision)}</li>`).join('')}</ul></details>`:''}`;
+   const followAnswer=chatIsNearBottom(transcript);turn.dataset.turnState='answered';turn.innerHTML=`<p class="disclosure">You asked: ${esc(data.question)}<br>${esc(momentLabel)}</p><div class="match-chat-response">${answerContent(data)}</div>${(data.scope==='general'&&!showSources?[]:data.notices||[]).map(n=>`<p class="disclosure">${esc(n)}</p>`).join('')}${showSources?`<details><summary>Answer sources</summary><p>${sourceDescription(data)}</p>${(data.lookups||[]).map(l=>`<p>${esc(l.count)} matching events / ${clock(l.scope.timeFrom)} to ${clock(l.scope.timeTo)}<br>Filters: ${esc(Object.entries(l.query.filters||{}).map(([k,v])=>`${k}: ${v}`).join(', ')||'all received events')}</p>`).join('')}<ul>${(data.evidence||[]).map(e=>`<li>${esc(e.type)}: ${esc(e.id)} / v${esc(e.revision)}</li>`).join('')}</ul></details>`:''}`;
    turn.querySelector('.match-chat-response').lang=data.language||c.language||'en';
    if(onInspect){
     const moments=answerMomentLinks(data,getContext().eventRecords,getContext().time);

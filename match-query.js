@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {matchState} from './match-stream.js';
+import {actionOutcome} from './action-evidence.js';
 import {recoveryClassification,RECOVERY_KINDS} from './recovery-classification.js';
 
 const keys=['filters','order','limit','aggregate','timeFrom','timeTo','timeFromExclusive','timeToExclusive','groupCount','groupOrder'];
@@ -84,7 +85,7 @@ export function executeMatchQuery(input,query,{stateFactory=matchState}={}){
  }
  const active=[...latest.values()].filter(event=>event.operation!=='delete');
  const window=active.filter(e=>(query.timeFromExclusive?e.time>timeFrom:e.time>=timeFrom)&&(query.timeToExclusive?e.time<timeTo:e.time<=timeTo));
- const shotOutcome=e=>e.result===true?'goal':e.result===null?'pending':e.outcome;
+ const shotOutcome=e=>{const status=actionOutcome(e)?.status;return shotOutcomes.includes(status)?status:undefined;};
  const linkedShot=e=>{
   // For this derived filter, cause and shotId are alternative identities of
   // the source shot. If both are supplied they must agree BEFORE resolution;
@@ -96,17 +97,19 @@ export function executeMatchQuery(input,query,{stateFactory=matchState}={}){
   const candidate=latest.get(identities[0]);
   return candidate&&candidate.type==='shot'&&candidate.operation!=='delete'&&candidate.time<=e.time?candidate:null;
  };
+ // Unknown/malformed source classifications are missing coverage, not a known nonmatch.
+ const linkedOutcome=e=>{const shot=linkedShot(e);return shot?shotOutcome(shot):undefined;};
  const references=e=>[ref(e),...(own(filters,'linkedShotOutcome')&&linkedShot(e)?[ref(linkedShot(e))]:[])];
  const uniqueReferences=items=>[...new Map(items.map(item=>[`${item.id}@${item.revision}`,item])).values()];
  const roster=new Map((state.frames.at(-1)?.players||[]).map(p=>[p.id,p.name]));
  const entityResolution=resolveEntities(filters,state.frames.at(-1)?.players||[],active);
- const field=(e,k)=>k==='recoveryClass'?(['ball-win','initial-control'].includes(recoveryClassification(e))?recoveryClassification(e):undefined):k==='result'&&!['pass','shot'].includes(e.type)?undefined:k==='linkedShotOutcome'?(linkedShot(e)?shotOutcome(linkedShot(e)):undefined):k==='receiver'?roster.get(e.receiverId)||e.receiverId:k==='player'?e.player:k==='assistPlayer'?e.assist?.player:k==='outcome'&&e.type==='shot'?shotOutcome(e):e[k];
+ const field=(e,k)=>k==='recoveryClass'?(['ball-win','initial-control'].includes(recoveryClassification(e))?recoveryClassification(e):undefined):k==='result'?(['pass','shot'].includes(e.type)&&[true,false,null].includes(e.result)?e.result:undefined):k==='linkedShotOutcome'?linkedOutcome(e):k==='receiver'?roster.get(e.receiverId)||e.receiverId:k==='player'?e.player:k==='assistPlayer'?e.assist?.player:k==='outcome'&&e.type==='shot'?shotOutcome(e):e[k];
  const matchesFilter=(e,k,v)=>{
   if(entityKeys.includes(k)){
    const resolution=entityResolution[k],id=k==='receiver'?e.receiverId:k==='player'?e.playerId:e.assist?.playerId;
    return resolution.status==='resolved'&&(id?id===resolution.canonicalId:field(e,k)!=null&&normalizeName(field(e,k))===normalizeName(resolution.candidates[0].name));
   }
-  if(k==='linkedShotOutcome'&&v==='on-target'){const shot=linkedShot(e);return !!shot&&(shot.result===true||shot.result===false&&['saved','on-target'].includes(shot.outcome));}
+  if(k==='linkedShotOutcome'&&v==='on-target')return ['goal','saved','on-target'].includes(linkedOutcome(e));
   return k==='outcome'&&v==='on-target'?e.type==='shot'&&(e.result===true||e.result===false&&['saved','on-target'].includes(e.outcome)):field(e,k)===v;
  };
  const matches=window.filter(e=>Object.entries(filters).every(([k,v])=>matchesFilter(e,k,v))&&(canonical.aggregate!=='by-assister'||e.type==='shot'&&e.result===true&&!!e.assist?.playerId));

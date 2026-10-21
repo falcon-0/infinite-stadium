@@ -8,5 +8,15 @@ __pycache__/
 .runtime/
 .vercel/
 
-.vercel
-.env*
+# Local agent configuration and generated development output
+.agents/
+skills-lock.json
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+.pytest_cache/
+.coverage
+coverage/
+dist/
+build/

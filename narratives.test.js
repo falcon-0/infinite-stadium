@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {feed} from './engine.js';
 import {matchRecap,recapChanges,recapFromState} from './narratives.js';
 import {matchState} from './match-stream.js';
+import {recoveryClassification} from './recovery-classification.js';
 
 test('recap and overlay output contain only received evidence',()=>{
  for(const time of [0,76,130,163,169,190,284,360]){
@@ -101,5 +102,29 @@ test('nonboolean shot flags cannot become goals in narrative rank, title or mome
   assert.deepEqual(recap.score,{home:0,away:0});assert.notEqual(entry.title,'Goal');assert.notEqual(entry.selectionReason,'goal');
   assert.match(entry.text,/outcome is not yet known/);assert.match(entry.text,/Score at this moment: 0-0/);
   assert.doesNotMatch(entry.text,/had a shot saved|scored|shot off target/);
+ }
+});
+
+
+test('localized recaps describe keeper collections precisely without changing ball-win measurements',()=>{
+ for(const [kind,seed,name] of [['counter',17,'I. Kerr'],['duel',17,'M. Carter'],['counter',1000,'K. Grant'],['duel',1001,'A. Ahmed']]){
+  const state=matchState({kind,seed,time:120}),before=structuredClone(state);
+  assert.ok(state.events.some(e=>e.type==='recovery'&&e.recoveryKind==='goalkeeper-hold'&&recoveryClassification(e)==='ball-win'));
+  for(const language of ['en','es','fr','pt']){
+   const recap=recapFromState(state,{language,audience:'analyst',limit:10});
+   const collection=language==='en'?'collected the ball':language==='es'?'recogió el balón':language==='fr'?'a capté le ballon':'recolheu a bola';
+   const entry=recap.entries.find(e=>e.text.includes(name+' '+collection));assert.ok(entry,kind+' '+seed+' '+language);
+   assert.ok(entry.evidence.some(ref=>state.events.some(e=>e.id===ref.id&&e.revision===ref.revision&&e.recoveryKind==='goalkeeper-hold')));
+   assert.deepEqual(recap.stats,state.stats);assert.deepEqual(state,before);
+  }
+ }
+});
+
+test('initial or unclassified recap recovery does not assert that a ball was won',()=>{
+ for(const recoveryKind of ['segment-start',undefined]){
+  const recovery={...feed.find(e=>e.type==='recovery'),id:'control',time:1,arrivedAt:1,revision:1,recoveryKind};
+  const shot={...feed.find(e=>e.type==='shot'),id:'shot-control',team:recovery.team,time:10,arrivedAt:10,revision:1,cause:'control'};
+  const entry=matchRecap(10,{},[recovery,shot]).entries[0];
+  assert.doesNotMatch(entry.text,/won the ball/);assert.match(entry.text,recoveryKind?/had control of the ball/:/collected the ball/);
  }
 });

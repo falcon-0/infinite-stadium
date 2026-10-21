@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {executeOperationPlan,operationPlanSchema} from './match-operation-proof.js';
+import {canonicalOperationSelection,executeOperationPlan,operationPlanSchema} from './match-operation-proof.js';
 import {matchState} from './match-stream.js';
 import {executeMatchQuery} from './match-query.js';
 
@@ -25,7 +25,7 @@ test('pass completion ratio excludes pending outcomes and proves both team fract
  assert.equal(proof.values.pendingExcluded,true);assert.equal(proof.values.definition,'completed/(completed+failed)');
  assert.deepEqual(proof.evidence,result.queryResults.map(q=>q.scopeReference));
  assert.match(result.claims[0].text,/100%.*5 completed of 5.*1 awaiting.*66.7%.*4 completed of 6/);
- assert.doesNotMatch(result.claims[0].text,/0 awaiting an outcome/);
+ assert.match(result.claims[0].text,/0 awaiting an outcome/);
  assert.ok(Object.isFrozen(proof.values.teams[0]));
 });
 
@@ -46,7 +46,7 @@ test('ratio rejects missing or malformed classifications and unresolved team par
  }
  const result=run(rate(),{state:{...base,events:[event('bad-team',4,{type:'pass',result:true,team:'unknown'})]}},request);
  assert.equal(result.proofs[0].status,'unavailable');
- for(const change of [{subjects:[]},{subjects:['h1']},{subjects:['home','h1']},{operator:'difference'},{metric:'completedPasses'}])assert.throws(()=>run(rate(change),{state:base},request),RangeError);
+ for(const change of [{subjects:['h1']},{subjects:['home','h1']},{operator:'difference'},{metric:'completedPasses'}])assert.throws(()=>run(rate(change),{state:base},request),RangeError);
 });
 
 test('ratio uses current received revisions, deletions and exact window without future leakage',()=>{
@@ -249,5 +249,93 @@ test('arbitrary seeds and authored design cases use data operations rather than 
   assert.equal(result.proofs[0].status,'proved');
   if(ordered){assert.equal(result.proofs[0].values.first.event.time,testCase.expected.first.time);assert.equal(result.proofs[0].values.latest.event.time,testCase.expected.latest.time);}
   else assert.equal(result.proofs[0].values.absoluteMargin,1);
+ }
+});
+
+test('combined passing accuracy sums settled outcomes rather than averaging team percentages',()=>{
+ const state={...base,events:[event('hc',1,{type:'pass',result:true}),event('hf',2,{type:'pass',result:false}),event('hp',3,{type:'pass',result:null}),
+  ...[4,5,6].map(time=>event(`ac${time}`,time,{type:'pass',result:true,team:'away',playerId:'a1'}))]};
+ const result=run(rate({subjects:[]}),{state},request),proof=result.proofs[0],v=proof.values.combined;
+ assert.deepEqual([v.id,v.completed,v.failed,v.pending,v.denominator,v.percentage],[null,4,1,1,5,80]);
+ assert.equal(proof.values.teams,undefined);assert.equal(result.queryCount,3);assert.equal(v.label,'Both teams combined');
+ assert.deepEqual(proof.evidence,result.queryResults.map(q=>q.scopeReference));assert.equal(proof.evidence.length,3);
+ assert.ok(Object.isFrozen(v));assert.match(proof.sourceFingerprint,/^[a-f0-9]{64}$/);
+ const teams=run(rate(),{state},request).proofs[0].values.teams;
+ assert.deepEqual(teams.map(v=>v.percentage),[50,100]);assert.notEqual(v.percentage,(teams[0].percentage+teams[1].percentage)/2);
+ assert.equal(run(rate({subjects:['away']}),{state},request).proofs[0].values.teams[0].percentage,100);
+});
+
+test('combined real fixture uses 11 completed of 12 settled passes and one pending',()=>{
+ const input={kind:'interrupted',seed:41,time:118,language:'en',question:'What is the combined passing accuracy on settled passes?'};
+ const result=executeOperationPlan(input,plan(operation({requestSpan:input.question,operator:'ratio',metric:'passCompletionRate',subjects:[],timeTo:118}))),v=result.proofs[0].values.combined;
+ assert.deepEqual([v.completed,v.failed,v.pending,v.numerator,v.denominator,v.displayPercent],[11,1,1,11,12,'91.7']);
+ assert.equal(v.ratio,11/12);assert.equal(result.queryCount,3);assert.match(result.claims[0].text,/Both teams combined: 91.7%.*11 completed of 12.*1 awaiting/);
+});
+
+test('combined rate handles zero and unknown partitions conservatively in all four languages',()=>{
+ for(const language of ['en','es','fr','pt']){
+  const result=run(rate({subjects:[]}),{state:{...base,events:[event('pending',4,{type:'pass',result:null})]}},{...request,language});
+  const v=result.proofs[0].values.combined;assert.equal(v.ratio,null);assert.equal(v.denominator,0);assert.equal(v.pending,1);
+  assert.equal(v.label,{en:'Both teams combined',es:'Ambos equipos combinados',fr:'Les deux équipes réunies',pt:'As duas equipes combinadas'}[language]);
+  assert.doesNotMatch(result.claims[0].text,/0\s*%/);
+ }
+ const zero=run(rate({subjects:[]}),{state:{...base,events:[event('failed',3,{type:'pass',result:false})]}},request).proofs[0].values.combined;
+ assert.equal(zero.percentage,0);assert.equal(zero.denominator,1);
+ for(const change of [{result:undefined},{result:'complete'},{team:'unknown'},{team:undefined}]){
+  const result=run(rate({subjects:[]}),{state:{...base,events:[event('invalid',3,{type:'pass',result:true,...change})]}},request);
+  assert.equal(result.proofs[0].status,'unavailable');assert.equal(result.proofs[0].values,null);
+ }
+});
+
+test('combined rate respects current revisions, deletion, window and future arrival boundaries',()=>{
+ const state={...base,events:[event('r',3,{type:'pass',result:null}),event('r',3,{type:'pass',result:true,revision:2,arrivedAt:5}),
+  event('r',3,{type:'pass',result:false,revision:3,arrivedAt:30}),event('d',7,{type:'pass',result:false}),event('d',7,{type:'pass',revision:2,arrivedAt:8,operation:'delete'}),
+  event('p',12,{type:'pass',result:null,team:'away',playerId:'a1'}),event('outside',25,{type:'pass',result:'bad'}),event('late',15,{type:'pass',result:'bad',arrivedAt:30})]};
+ const result=run(rate({subjects:[]}),{state},request).proofs[0].values.combined;
+ assert.deepEqual([result.completed,result.failed,result.pending],[1,0,1]);
+ const restricted=run(rate({subjects:[],timeFrom:10}),{state},request).proofs[0].values.combined;
+ assert.deepEqual([restricted.completed,restricted.failed,restricted.pending,restricted.ratio],[0,0,1,null]);
+});
+
+
+test('ratio output explicitly states zero pending passes for combined and team scopes in every language',()=>{
+ const expected={en:'0 awaiting an outcome',es:'0 pendientes de resultado',fr:'0 en attente de résultat',pt:'0 aguardando resultado'};
+ for(const language of Object.keys(expected))for(const subjects of [[],['home'],['home','away']]){
+  const request={kind:'interrupted',seed:41,time:110,language,question:'What is the combined passing accuracy and how many passes await an outcome?'};
+  const result=executeOperationPlan(request,plan(operation({requestSpan:request.question,operator:'ratio',metric:'passCompletionRate',subjects,timeTo:110})));
+  const proof=result.proofs[0];
+  const values=proof.values.combined?[proof.values.combined]:proof.values.teams;
+  assert.ok(values.every(value=>value.pending===0));
+  assert.equal(result.claims[0].text.split(expected[language]).length-1,values.length,`${language} ${JSON.stringify(subjects)}`);
+  if(!subjects.length){assert.equal(proof.values.combined.denominator,12);assert.equal(proof.values.combined.completed,11);}
+ }
+});
+
+
+test('actual two-request ratio renders once and retains both original request owners',()=>{
+ const input={kind:'counter',seed:2063,time:19,language:'en',question:"At 00:19, what's Northbridge's pass completion percentage, and how many passes are still waiting for an outcome?"};
+ const first=rate({id:'passCompletionRate-home',subjects:['home'],timeTo:19,requestSpan:"what's Northbridge's pass completion percentage"}),second={...first,id:'pendingPasses-home',requestSpan:'how many passes are still waiting for an outcome'};
+ const result=executeOperationPlan(input,plan(first,second));
+ assert.equal(result.claims.length,1);assert.equal(result.proofs.length,1);assert.equal(result.originalProofs.length,2);assert.deepEqual(result.originalToSelectedIndex,[0,0]);assert.deepEqual(result.proofs[0].requestOwnership,[{id:first.id,requestSpan:first.requestSpan},{id:second.id,requestSpan:second.requestSpan}]);
+ assert.deepEqual(result.proofs[0].values.teams.map(v=>[v.completed,v.failed,v.pending,v.denominator]),[[2,0,1,2]]);assert.match(result.claims[0].text,/100%/);assert.match(result.claims[0].text,/1 awaiting/);assert.equal(result.queryCount,3);assert.equal(Object.hasOwn(result.originalProofs[0],'requestOwnership'),false);assert.ok(Object.isFrozen(result.proofs[0].requestOwnership));
+});
+
+test('operation dedup requires identical semantic proof and current citations, never equal wording alone',()=>{
+ const r=run(operation({operator:'ratio',metric:'passCompletionRate',subjects:['home']})),proof=r.proofs[0],claim=r.claims[0];
+ for(const mutate of [p=>p.window.to--,p=>p.evidence[0].revision++,p=>p.evidence[0].id+='other',p=>p.sourceFingerprint+='other',p=>p.subjects[0].id='away',p=>p.values.teams[0].pending++,p=>p.metric='attempts',p=>p.operator='difference',p=>p.qualifiers={passType:'cross'},p=>p.status='unavailable']){
+  const other=structuredClone(proof);other.id='second';other.requestSpan='Another request';mutate(other);const result=canonicalOperationSelection({proofs:[proof,other],claims:[claim,claim]});assert.equal(result.claims.length,2);assert.deepEqual(result.originalToSelectedIndex,[0,1]);
+ }
+ const other={...structuredClone(proof),id:'second',requestSpan:'Other request'};const altered=structuredClone(claim);altered.evidence[0].revision++;assert.equal(canonicalOperationSelection({proofs:[proof,other],claims:[claim,altered]}).claims.length,2);
+ assert.throws(()=>canonicalOperationSelection({proofs:[proof],claims:[]}),/align/);
+});
+
+
+test('mixed time windows label the whole-match comparison explicitly in all supported languages',()=>{
+ for(const [language,label] of [['en','So far:'],['es','En total:'],['fr','Depuis le début:'],['pt','Até agora:']]){
+  const question={kind:'counter',seed:2403,time:108,language,question:'Compare the recent interval with the whole passage.'};
+  const recent=operation({id:'recent',metric:'attempts',requestSpan:question.question,timeFrom:88,timeTo:108}),whole={...recent,id:'whole',timeFrom:0};
+  const result=executeOperationPlan(question,plan(recent,whole));assert.match(result.claims[0].text,/01:28/);assert.ok(result.claims[1].text.startsWith(label));
+  assert.deepEqual(result.proofs.map(proof=>proof.window),[{from:88,to:108},{from:0,to:108}]);assert.equal(result.queryCount,2);
+  const single=executeOperationPlan(question,plan(whole));assert.ok(!single.claims[0].text.startsWith(label),'single scope keeps existing concise form');
  }
 });

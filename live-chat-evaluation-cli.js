@@ -1,7 +1,7 @@
 import {mkdir,writeFile,readFile,readdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {answerMatchQuestionAI,needsQuestionClarification} from './match-question-ai.js';
+import {answerMatchQuestionAI,needsQuestionClarification,maximumQuestionModelCalls} from './match-question-ai.js';
 import {configuration} from './ai.js';
 import {captureEvaluationIdentity,scoreConversationReports} from './conversational-evaluation.js';
 import {createPersistentModelBudget} from './persistent-budget.js';
@@ -76,8 +76,8 @@ for(const item of cases.filter(c=>!only||only.includes(c.id))){
  if(id==='assist'&&previous)input.conversation=[{question:previous.question.slice(0,200),answer:previous.answer.slice(0,500),time:previous.observedAt}];
  const calls=[];
  const remaining=budget.snapshot();
- if(!needsQuestionClarification(input)&&remaining.limit-remaining.calls<5){
-  report.cases.push({id,input,status:'blocked',reason:'Insufficient remaining allowance for the bounded five-call path.',calls:[],quality:{verdict:'unreviewed'}});continue;
+ if(!needsQuestionClarification(input)&&remaining.limit-remaining.calls<maximumQuestionModelCalls){
+  report.cases.push({id,input,status:'blocked',reason:'Insufficient remaining allowance for the bounded six-call recovery path.',calls:[],quality:{verdict:'unreviewed'}});continue;
  }
  const fetcher=async(url,options)=>{
   const request=JSON.parse(options.body);
