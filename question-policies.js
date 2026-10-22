@@ -492,3 +492,15 @@ export const linkedActionCoveragePolicy = [
   'For an after-requested-event relation supported by a supplied recordedActionLinks entry, set relationSourceLinkIndex to that exact matching entry and include the canonical recovery claim. Match the actual requested anchor actor and event; do not choose a nearby action or infer first/next ordering from a source link.',
   'Classify temporalRelation separately for each request component. A clause asking whether a cause is known does not request before/after ordering merely because an earlier clause asks about a sequence. Use none for that causal-uncertainty clause. A source link proves sequence only, never forcing.',
 ].join(' ');
+
+export const quantityPopulationReviewPolicy = [
+  'For each quantity, first resolve the requested actor from the WHOLE question and conversation. ',
+  'A name in an earlier clause can bind he/she/his/her or its translated pronoun in the count ',
+  'clause. A count of that player’s own actions uses named-entity with the player’s exact roster ',
+  'ID. combined means an unfiltered match-wide total across all participants, never one player’s ',
+  'total and never two question clauses combined. Producing one number does not make a player ',
+  'count combined. by-player gives separate counts for the explicitly requested player IDs; ',
+  'an empty ID list requires complete player coverage. A neutral quantity question permits zero ',
+  'and does not assert that matching actions occurred. A source-proved zero is a valid direct ',
+  'answer, not by itself a false premise requiring an additional correction paragraph.',
+].join('');

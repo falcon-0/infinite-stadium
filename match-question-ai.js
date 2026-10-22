@@ -22,6 +22,7 @@ import {
   reviewerPolicy,
   exclusivePlanningPolicy,
   canonicalSelectionPolicy,
+  quantityPopulationReviewPolicy,
 } from './question-policies.js';
 import { normalizePlannedQuery } from './question-query-normalization.js';
 import { linkedGoalStory } from './linked-goal-story.js';
@@ -145,72 +146,68 @@ export function requestedQuantitySchema(components, roster, window = null) {
   };
   const filterSchema = matchQueryDefinition.parameters.properties.filters.properties;
   return {
-    anyOf: Object.entries(states).flatMap(([action, values]) =>
-      ['combined', 'by-team', 'by-player', 'named-entity'].map((grouping) => {
-        const ids =
-          grouping === 'by-team'
-            ? teams
-            : grouping === 'by-player'
-              ? players
-              : grouping === 'named-entity'
-                ? [...teams, ...players]
-                : [];
-        const fields =
-          action === 'recovery'
-            ? ['recoveryKind', 'linkedShotOutcome']
-            : action === 'pass'
-              ? ['bodyPart', 'passType', 'technique']
-              : action === 'shot'
-                ? ['bodyPart']
-                : [];
-        const qualifiers = Object.fromEntries(
-          ['bodyPart', 'passType', 'technique', 'recoveryKind', 'linkedShotOutcome'].map((key) => [
-            key,
-            fields.includes(key)
-              ? { anyOf: [{ type: 'string', enum: filterSchema[key].enum }, { type: 'null' }] }
-              : { type: 'null' },
-          ]),
-        );
-        const bounds = Object.fromEntries(
-          ['timeFrom', 'timeTo', 'timeFromExclusive', 'timeToExclusive'].map((key) => [
-            key,
-            window
-              ? {
-                  type: typeof window[key] === 'boolean' ? 'boolean' : 'number',
-                  enum: [window[key]],
-                }
-              : {
-                  anyOf: [
-                    key.endsWith('Exclusive')
-                      ? { type: 'boolean' }
-                      : { type: 'number', minimum: 0 },
-                    { type: 'null' },
-                  ],
-                },
-          ]),
-        );
-        return strictObject({
-          requestSpan: {
-            type: 'string',
-            enum: components,
-            description: 'Copy the exact owning component; multiple typed measures may share it.',
-          },
-          action: { type: 'string', enum: [action] },
-          state: { type: 'string', enum: values },
-          grouping: { type: 'string', enum: [grouping] },
-          subjectIds: {
-            type: 'array',
-            minItems: grouping === 'named-entity' ? 1 : 0,
-            maxItems: ids.length,
-            items: ids.length ? { type: 'string', enum: ids } : { type: 'string' },
-          },
-          ...bounds,
-          qualifiers: fields.length
-            ? { anyOf: [{ type: 'null' }, strictObject(qualifiers)] }
+    description:
+      'Group by the requested population, not the number of question clauses. combined means one unfiltered match-wide total across all players and teams, with subjectIds empty. A named player or team count uses named-entity and its exact source ID, including a pronoun whose actor is stated in another clause or conversation. Do not turn he/she/his/her into an all-player total merely because the count clause omits the name. by-player is a separate count for each requested player, not a combined total; empty subjectIds requires complete player coverage.',
+    anyOf: Object.entries(states).map(([action, values]) => {
+      const ids = [...teams, ...players];
+      const fields =
+        action === 'recovery'
+          ? ['recoveryKind', 'linkedShotOutcome']
+          : action === 'pass'
+            ? ['bodyPart', 'passType', 'technique']
+            : action === 'shot'
+              ? ['bodyPart']
+              : [];
+      const qualifiers = Object.fromEntries(
+        ['bodyPart', 'passType', 'technique', 'recoveryKind', 'linkedShotOutcome'].map((key) => [
+          key,
+          fields.includes(key)
+            ? { anyOf: [{ type: 'string', enum: filterSchema[key].enum }, { type: 'null' }] }
             : { type: 'null' },
-        });
-      }),
-    ),
+        ]),
+      );
+      const bounds = Object.fromEntries(
+        ['timeFrom', 'timeTo', 'timeFromExclusive', 'timeToExclusive'].map((key) => [
+          key,
+          window
+            ? {
+                type: typeof window[key] === 'boolean' ? 'boolean' : 'number',
+                enum: [window[key]],
+              }
+            : {
+                anyOf: [
+                  key.endsWith('Exclusive') ? { type: 'boolean' } : { type: 'number', minimum: 0 },
+                  { type: 'null' },
+                ],
+              },
+        ]),
+      );
+      return strictObject({
+        requestSpan: {
+          type: 'string',
+          enum: components,
+          description: 'Copy the exact owning component; multiple typed measures may share it.',
+        },
+        action: { type: 'string', enum: [action] },
+        state: { type: 'string', enum: values },
+        grouping: {
+          type: 'string',
+          enum: ['combined', 'by-team', 'by-player', 'named-entity'],
+          description:
+            'Population contract: combined is unfiltered across all players; named-entity is the explicit player/team, including a pronoun resolved from another clause; by-team/by-player require each requested entity separately.',
+        },
+        subjectIds: {
+          type: 'array',
+          minItems: 0,
+          maxItems: ids.length,
+          items: ids.length ? { type: 'string', enum: ids } : { type: 'string' },
+        },
+        ...bounds,
+        qualifiers: fields.length
+          ? { anyOf: [{ type: 'null' }, strictObject(qualifiers)] }
+          : { type: 'null' },
+      });
+    }),
   };
 }
 
@@ -1203,6 +1200,11 @@ export function requestedQuantityIssues(part, answer, packet, selection, operati
             ),
           ),
       );
+      // Explicit player subsets can be proved by complete individual counts,
+      // just as explicit team subsets can. An empty list still requires the
+      // complete grouped source or independently proved ranking below.
+      if (!covered && demand.subjectIds.length)
+        covered = demand.subjectIds.every((id) => atoms.some((atom) => atom.id === id));
       if (!covered)
         covered = quantityClaimIndices(part, answer, selection).some((index) => {
           const proof = selection?.proofs?.[index];
@@ -5618,6 +5620,12 @@ export async function answerMatchQuestionAI(
                 }
               : message,
     );
+    if (stage === 'review')
+      messages = messages.map((message) =>
+        message.role === 'system'
+          ? { ...message, content: message.content + '\n' + quantityPopulationReviewPolicy }
+          : message,
+      );
     messages = messages.map((message) =>
       message.role === 'system'
         ? {

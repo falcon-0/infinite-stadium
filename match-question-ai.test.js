@@ -1,3 +1,4 @@
+import { quantityPopulationReviewPolicy } from './question-policies.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -56,27 +57,68 @@ import { projectReviewEvidence } from './question-evidence-check.js';
 import { passQuerySelectionPermission, passQueryOutcomeAllowed } from './pass-query-permissions.js';
 import { actionOutcome, checkActionEvidence } from './action-evidence.js';
 
-test('quantity wire correlates action states and grouping IDs without aliases', () => {
-  const roster = [{ id: 'home-1' }, { id: 'away-10' }],
-    schema = requestedQuantitySchema(['Count the actions'], roster);
-  const branch = (action, group) =>
-    schema.anyOf.find(
-      (v) => v.properties.action.enum[0] === action && v.properties.grouping.enum[0] === group,
-    ).properties;
-  assert.deepEqual(branch('recovery', 'named-entity').state.enum, ['any']);
-  assert.ok(!branch('pass', 'by-team').state.enum.includes('saved'));
-  assert.deepEqual(branch('shot', 'by-team').subjectIds.items.enum, ['home', 'away']);
-  assert.deepEqual(branch('shot', 'by-player').subjectIds.items.enum, ['home-1', 'away-10']);
-  assert.equal(branch('shot', 'combined').subjectIds.maxItems, 0);
-  assert.deepEqual(branch('recovery', 'named-entity').qualifiers.anyOf[1].properties.bodyPart, {
-    type: 'null',
-  });
+test('quantity wire factors action branches while runtime retains population constraints', () => {
+  const roster = [{ id: 'home-1' }, { id: 'away-10' }];
+  const schema = requestedQuantitySchema(['Count the actions'], roster);
+  assert.equal(schema.anyOf.length, 5, 'Do not duplicate each action once per grouping');
+  const branch = (action) =>
+    schema.anyOf.find((v) => v.properties.action.enum[0] === action).properties;
+  assert.deepEqual(branch('recovery').state.enum, ['any']);
+  assert.ok(!branch('pass').state.enum.includes('saved'));
+  assert.deepEqual(branch('shot').grouping.enum, [
+    'combined',
+    'by-team',
+    'by-player',
+    'named-entity',
+  ]);
+  assert.deepEqual(branch('shot').subjectIds.items.enum, ['home', 'away', 'home-1', 'away-10']);
+  assert.deepEqual(branch('recovery').qualifiers.anyOf[1].properties.bodyPart, { type: 'null' });
   assert.ok(
-    branch(
-      'recovery',
-      'named-entity',
-    ).qualifiers.anyOf[1].properties.linkedShotOutcome.anyOf[0].enum.includes('saved'),
+    branch('recovery').qualifiers.anyOf[1].properties.linkedShotOutcome.anyOf[0].enum.includes(
+      'saved',
+    ),
   );
+  const answer = {
+    scope: 'match',
+    claims: [{ kind: 'observation', text: '0 passes', evidence: [] }],
+  };
+  for (const [grouping, subjectIds, reason] of [
+    ['combined', ['home-1'], /actual entity type/],
+    ['by-team', ['home-1'], /Team grouping/],
+    ['by-team', ['home', 'home'], /Team grouping/],
+    ['by-player', ['home'], /actual entity type/],
+    ['named-entity', ['unlisted'], /actual entity type/],
+  ]) {
+    const part = {
+      requestSpan: 'How many passes',
+      claimIndices: [0],
+      requestedQuantity: [
+        {
+          requestSpan: 'How many passes',
+          action: 'pass',
+          state: 'any',
+          grouping,
+          subjectIds,
+          timeFrom: 0,
+          timeTo: 120,
+          timeFromExclusive: false,
+          timeToExclusive: false,
+          qualifiers: null,
+        },
+      ],
+    };
+    const issues = requestedQuantityIssues(
+      part,
+      answer,
+      { question: 'How many passes?', observedAt: 120, roster, queryResults: [] },
+      { proofs: [] },
+      [],
+    );
+    assert.ok(
+      issues.some((issue) => reason.test(issue.reason)),
+      grouping + JSON.stringify(subjectIds),
+    );
+  }
 });
 
 test('list count augmentation executes exact predicates and bounds instead of counting returned rows', () => {
@@ -20630,7 +20672,13 @@ test('a neutral French zero count reaches independent review without a redundant
         followUp: '',
       };
     },
-    (packet) => {
+    (packet, body) => {
+      assert.ok(
+        body.messages
+          .find((message) => message.role === 'system')
+          .content.includes(quantityPopulationReviewPolicy),
+        'The active canonical review receives the population policy',
+      );
       reviewed = true;
       return {
         decision: 'approve',
@@ -20683,7 +20731,58 @@ test('a neutral French zero count reaches independent review without a redundant
   assert.equal(answer.execution.modelCalls, 3);
   assert.match(answer.answer, /Cole.*Reed.*01:50/);
   assert.match(answer.answer, /0 passes manquées/);
+  const perPlayer = sequenceTransport([
+    ...responses.slice(0, 2),
+    (packet, body) => {
+      const review = responses[2](packet, body);
+      review.requestCheck.coverage[1].requestedQuantity[0].grouping = 'by-player';
+      return review;
+    },
+  ]);
+  const perPlayerAnswer = await answerMatchQuestionAI(question, {
+    config,
+    fetcher: perPlayer.fetcher,
+  });
+  assert.equal(perPlayerAnswer.execution.modelCalls, 3);
+  assert.equal(perPlayerAnswer.answer, answer.answer);
   for (const [name, change] of [
+    [
+      'all players cannot use one player count',
+      (review) => {
+        Object.assign(review.requestCheck.coverage[1].requestedQuantity[0], {
+          grouping: 'by-player',
+          subjectIds: [],
+        });
+      },
+    ],
+    [
+      'missing second requested player',
+      (review) => {
+        Object.assign(review.requestCheck.coverage[1].requestedQuantity[0], {
+          grouping: 'by-player',
+          subjectIds: ['home-7', 'away-7'],
+        });
+      },
+    ],
+    [
+      'player count cannot use wrong outcome',
+      (review) => {
+        Object.assign(review.requestCheck.coverage[1].requestedQuantity[0], {
+          grouping: 'by-player',
+          state: 'pending',
+        });
+      },
+    ],
+    [
+      'player count cannot use wrong window',
+      (review) => {
+        Object.assign(review.requestCheck.coverage[1].requestedQuantity[0], {
+          grouping: 'by-player',
+          timeFrom: 30,
+        });
+      },
+    ],
+
     [
       'explicit correction still required',
       (review) => {
@@ -20711,8 +20810,8 @@ test('a neutral French zero count reaches independent review without a redundant
   ]) {
     const negative = sequenceTransport([
       ...responses.slice(0, 2),
-      (packet) => {
-        const review = responses[2](packet);
+      (packet, body) => {
+        const review = responses[2](packet, body);
         change(review);
         return review;
       },
