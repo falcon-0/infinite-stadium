@@ -311,7 +311,11 @@ export const exclusivePlanningPolicy = [
   '"before",sameTeam:true when the question refers to that event’s side,samePlayer:true only when ',
   'the requested subsequent action belongs to that player}. Leave numeric timeFrom/timeTo and ',
   'exclusive flags null for a relative query: the application binds them to the actual event, not ',
-  'currentTime. The requested anchor remains a separate part of the answer. Never guess its time ',
+  'currentTime. A yes/no question about whether an action had already happened before another ',
+  'action, or happened later, is also a relative sequence: retrieve the named anchor and the ',
+  'dependent action with its explicit actor and outcome. One independent action lookup cannot ',
+  'establish that requested comparison; background events are not an executed anchor query. ',
+  'The requested anchor remains a separate part of the answer. Never guess its time ',
   'or use the observation pin as a substitute. Dependencies must refer backwards. Normally the ',
   'anchor query returns exactly one event and anchorOrdinal is null. For an explicitly requested ',
   'ordinal, retrieve an ascending list prefix with limit at least that one-based ordinal ',
@@ -488,3 +492,15 @@ export const linkedActionCoveragePolicy = [
   'For an after-requested-event relation supported by a supplied recordedActionLinks entry, set relationSourceLinkIndex to that exact matching entry and include the canonical recovery claim. Match the actual requested anchor actor and event; do not choose a nearby action or infer first/next ordering from a source link.',
   'Classify temporalRelation separately for each request component. A clause asking whether a cause is known does not request before/after ordering merely because an earlier clause asks about a sequence. Use none for that causal-uncertainty clause. A source link proves sequence only, never forcing.',
 ].join(' ');
+
+export const quantityPopulationReviewPolicy = [
+  'For each quantity, first resolve the requested actor from the WHOLE question and conversation. ',
+  'A name in an earlier clause can bind he/she/his/her or its translated pronoun in the count ',
+  'clause. A count of that player’s own actions uses named-entity with the player’s exact roster ',
+  'ID. combined means an unfiltered match-wide total across all participants, never one player’s ',
+  'total and never two question clauses combined. Producing one number does not make a player ',
+  'count combined. by-player gives separate counts for the explicitly requested player IDs; ',
+  'an empty ID list requires complete player coverage. A neutral quantity question permits zero ',
+  'and does not assert that matching actions occurred. A source-proved zero is a valid direct ',
+  'answer, not by itself a false premise requiring an additional correction paragraph.',
+].join('');

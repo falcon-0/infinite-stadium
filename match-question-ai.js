@@ -22,6 +22,7 @@ import {
   reviewerPolicy,
   exclusivePlanningPolicy,
   canonicalSelectionPolicy,
+  quantityPopulationReviewPolicy,
 } from './question-policies.js';
 import { normalizePlannedQuery } from './question-query-normalization.js';
 import { linkedGoalStory } from './linked-goal-story.js';
@@ -145,72 +146,68 @@ export function requestedQuantitySchema(components, roster, window = null) {
   };
   const filterSchema = matchQueryDefinition.parameters.properties.filters.properties;
   return {
-    anyOf: Object.entries(states).flatMap(([action, values]) =>
-      ['combined', 'by-team', 'by-player', 'named-entity'].map((grouping) => {
-        const ids =
-          grouping === 'by-team'
-            ? teams
-            : grouping === 'by-player'
-              ? players
-              : grouping === 'named-entity'
-                ? [...teams, ...players]
-                : [];
-        const fields =
-          action === 'recovery'
-            ? ['recoveryKind', 'linkedShotOutcome']
-            : action === 'pass'
-              ? ['bodyPart', 'passType', 'technique']
-              : action === 'shot'
-                ? ['bodyPart']
-                : [];
-        const qualifiers = Object.fromEntries(
-          ['bodyPart', 'passType', 'technique', 'recoveryKind', 'linkedShotOutcome'].map((key) => [
-            key,
-            fields.includes(key)
-              ? { anyOf: [{ type: 'string', enum: filterSchema[key].enum }, { type: 'null' }] }
-              : { type: 'null' },
-          ]),
-        );
-        const bounds = Object.fromEntries(
-          ['timeFrom', 'timeTo', 'timeFromExclusive', 'timeToExclusive'].map((key) => [
-            key,
-            window
-              ? {
-                  type: typeof window[key] === 'boolean' ? 'boolean' : 'number',
-                  enum: [window[key]],
-                }
-              : {
-                  anyOf: [
-                    key.endsWith('Exclusive')
-                      ? { type: 'boolean' }
-                      : { type: 'number', minimum: 0 },
-                    { type: 'null' },
-                  ],
-                },
-          ]),
-        );
-        return strictObject({
-          requestSpan: {
-            type: 'string',
-            enum: components,
-            description: 'Copy the exact owning component; multiple typed measures may share it.',
-          },
-          action: { type: 'string', enum: [action] },
-          state: { type: 'string', enum: values },
-          grouping: { type: 'string', enum: [grouping] },
-          subjectIds: {
-            type: 'array',
-            minItems: grouping === 'named-entity' ? 1 : 0,
-            maxItems: ids.length,
-            items: ids.length ? { type: 'string', enum: ids } : { type: 'string' },
-          },
-          ...bounds,
-          qualifiers: fields.length
-            ? { anyOf: [{ type: 'null' }, strictObject(qualifiers)] }
+    description:
+      'Group by the requested population, not the number of question clauses. combined means one unfiltered match-wide total across all players and teams, with subjectIds empty. A named player or team count uses named-entity and its exact source ID, including a pronoun whose actor is stated in another clause or conversation. Do not turn he/she/his/her into an all-player total merely because the count clause omits the name. by-player is a separate count for each requested player, not a combined total; empty subjectIds requires complete player coverage.',
+    anyOf: Object.entries(states).map(([action, values]) => {
+      const ids = [...teams, ...players];
+      const fields =
+        action === 'recovery'
+          ? ['recoveryKind', 'linkedShotOutcome']
+          : action === 'pass'
+            ? ['bodyPart', 'passType', 'technique']
+            : action === 'shot'
+              ? ['bodyPart']
+              : [];
+      const qualifiers = Object.fromEntries(
+        ['bodyPart', 'passType', 'technique', 'recoveryKind', 'linkedShotOutcome'].map((key) => [
+          key,
+          fields.includes(key)
+            ? { anyOf: [{ type: 'string', enum: filterSchema[key].enum }, { type: 'null' }] }
             : { type: 'null' },
-        });
-      }),
-    ),
+        ]),
+      );
+      const bounds = Object.fromEntries(
+        ['timeFrom', 'timeTo', 'timeFromExclusive', 'timeToExclusive'].map((key) => [
+          key,
+          window
+            ? {
+                type: typeof window[key] === 'boolean' ? 'boolean' : 'number',
+                enum: [window[key]],
+              }
+            : {
+                anyOf: [
+                  key.endsWith('Exclusive') ? { type: 'boolean' } : { type: 'number', minimum: 0 },
+                  { type: 'null' },
+                ],
+              },
+        ]),
+      );
+      return strictObject({
+        requestSpan: {
+          type: 'string',
+          enum: components,
+          description: 'Copy the exact owning component; multiple typed measures may share it.',
+        },
+        action: { type: 'string', enum: [action] },
+        state: { type: 'string', enum: values },
+        grouping: {
+          type: 'string',
+          enum: ['combined', 'by-team', 'by-player', 'named-entity'],
+          description:
+            'Population contract: combined is unfiltered across all players; named-entity is the explicit player/team, including a pronoun resolved from another clause; by-team/by-player require each requested entity separately.',
+        },
+        subjectIds: {
+          type: 'array',
+          minItems: 0,
+          maxItems: ids.length,
+          items: ids.length ? { type: 'string', enum: ids } : { type: 'string' },
+        },
+        ...bounds,
+        qualifiers: fields.length
+          ? { anyOf: [{ type: 'null' }, strictObject(qualifiers)] }
+          : { type: 'null' },
+      });
+    }),
   };
 }
 
@@ -308,10 +305,21 @@ function questionViewerProfile(input, roster) {
 
 export function requestComponents(question) {
   const protectedText = String(question).replace(/\b([A-Z])\.(?=\s+[A-Z][a-z])/g, '$1\uE000');
+  // A fronted event-time comparison and its alternative form one chronological
+  // request, not two relations which must both be true. Keep ordinary multipart
+  // role requests separate so their existing completeness checks remain active.
+  const temporalPrefix =
+    /^(?:before|after|since|avant|après|apres|depuis|antes(?: de)?|después(?: de)?|despues(?: de)?|desde|após|apos|depois(?: de)?)\s+[^,;!?]+,\s*/iu;
+  const boundary =
+    /,?\s+(?:and|or|et|ou|y|o|e)\s+(?=(?:(?:before|after|since|avant|après|apres|depuis|antes(?: de)?|después(?: de)?|despues(?: de)?|desde|após|apos|depois(?: de)?)\s+\d{1,3}:[0-5]\d\s*,\s*)?[¿¡]?(?:what|who|whose|how|why|which|where|when|did|do|does|is|are|was|were|has|have|had|can|could|should|would|combien|qui|quel|quelle|quels|quelles|pourquoi|comment|cuántos|cuántas|quién|qué|cuál|cuáles|cómo|quantos|quantas|quem|qual|quais|como)\b)/i;
+  const conjunctionBoundary = (conjunctions) =>
+    new RegExp(boundary.source.replace('and|or|et|ou|y|o|e', conjunctions), 'i');
+  const independentBoundary = conjunctionBoundary('and|et|y|e');
+  const alternativeBoundary = conjunctionBoundary('or|ou|o');
   const pieces = protectedText
-    .split(
-      /[.!?;]\s+|,?\s+(?:and|or|et|ou|y|o|e)\s+(?=(?:(?:before|after|since|avant|après|apres|depuis|antes(?: de)?|después(?: de)?|despues(?: de)?|desde|após|apos|depois(?: de)?)\s+\d{1,3}:[0-5]\d\s*,\s*)?[¿¡]?(?:what|who|whose|how|why|which|where|when|did|do|does|is|are|was|were|has|have|can|could|should|would|combien|qui|quel|quelle|quels|quelles|pourquoi|comment|cuántos|cuántas|quién|qué|cuál|cuáles|cómo|quantos|quantas|quem|qual|quais|como)\b)/i,
-    )
+    .split(/[.!?;]\s+/)
+    .flatMap((sentence) => sentence.split(independentBoundary))
+    .flatMap((piece) => (temporalPrefix.test(piece) ? [piece] : piece.split(alternativeBoundary)))
     .map((piece) =>
       piece
         .replace(/\uE000/g, '.')
@@ -320,7 +328,7 @@ export function requestComponents(question) {
     )
     .filter(Boolean);
   const directive =
-    /(?:^|[,:–—]\s*|\s-\s*)(?:please\s+)?(?:who|whose|what|why|how|which|where|when|did|does|do|is|are|was|were|has|have|can|could|should|would|explain|tell|describe|compare|summari[sz]e|sum up|reconstruct|distinguish|give|show|talk|walk)\b/i;
+    /(?:^|[,:–—]\s*|\s-\s*)(?:please\s+)?(?:who|whose|what|why|how|which|where|when|did|does|do|is|are|was|were|has|have|had|can|could|should|would|explain|tell|describe|compare|summari[sz]e|sum up|reconstruct|distinguish|give|show|talk|walk)\b/i;
   const requests = pieces.flatMap((piece) => {
     // A declarative premise followed by a confirmation tag is itself a request.
     // Keep its subject/action instead of reducing it to the tag or dropping it
@@ -332,7 +340,7 @@ export function requestComponents(question) {
     )
       return [piece];
     const temporalPrefix = piece.match(
-      /^(?:before|after|since|avant|après|apres|depuis|antes(?: de)?|después(?: de)?|despues(?: de)?|desde|após|apos|depois(?: de)?)\s+\d{1,3}:[0-5]\d\s*,\s*/iu,
+      /^(?:before|after|since|avant|après|apres|depuis|antes(?: de)?|después(?: de)?|despues(?: de)?|desde|após|apos|depois(?: de)?)\s+[^,;!?]+,\s*/iu,
     );
     if (temporalPrefix) {
       const rest = piece.slice(temporalPrefix[0].length),
@@ -479,6 +487,31 @@ export function reviewCoverageMatches(review, answer, question) {
 /** The reviewer classifies the requested form and action independently of the
  * planner. These checks verify that the cited answer actually contains that
  * declared form/action; they do not claim to solve language interpretation. */
+// A displayed, source-proved zero directly answers a neutral count question.
+// This only permits the normal independent review to run; scope, quantity,
+// subject, outcome, coverage and explanation requirements are still checked.
+function canonicalZeroQuantityAnswer(selection, packet) {
+  return (
+    packet.requestedForm === 'fact' &&
+    explicitCountDemand(packet.question) &&
+    selection?.proofs?.some(
+      (proof, index) =>
+        proof.kind === 'count' &&
+        proof.modelGenerated === false &&
+        proof.value === 0 &&
+        proof.scope?.type === 'scope' &&
+        proof.query?.aggregate === 'count' &&
+        selection.claims[index]?.evidence.some((ref) => identity(ref) === identity(proof.scope)) &&
+        (packet.queryResults || []).some(
+          (source) =>
+            source.count === 0 &&
+            identity(source.scopeReference) === identity(proof.scope) &&
+            JSON.stringify(source.query) === JSON.stringify(proof.query) &&
+            JSON.stringify(source.scope) === JSON.stringify(proof.coverage),
+        ),
+    )
+  );
+}
 function canonicalScoreAnswer(selection, observedAt) {
   const proofs = selection?.proofs || [];
   const currentGoals = (proof) =>
@@ -1167,6 +1200,11 @@ export function requestedQuantityIssues(part, answer, packet, selection, operati
             ),
           ),
       );
+      // Explicit player subsets can be proved by complete individual counts,
+      // just as explicit team subsets can. An empty list still requires the
+      // complete grouped source or independently proved ranking below.
+      if (!covered && demand.subjectIds.length)
+        covered = demand.subjectIds.every((id) => atoms.some((atom) => atom.id === id));
       if (!covered)
         covered = quantityClaimIndices(part, answer, selection).some((index) => {
           const proof = selection?.proofs?.[index];
@@ -2510,7 +2548,13 @@ function positiveRelationWitness(part, answer, checks, selection, observedAt) {
   if (!relation) return false;
   for (const claimIndex of part.claimIndices) {
     const fact = selection?.proofs?.[claimIndex],
-      event = fact?.kind === 'event' ? fact : fact?.kind === 'ordered-event' ? fact.event : null;
+      event =
+        fact?.kind === 'event' ||
+        (fact?.kind === 'linked-goalkeeper-hold' && fact.modelGenerated === false)
+          ? fact
+          : fact?.kind === 'ordered-event'
+            ? fact.event
+            : null;
     if (!event || claimIndex === index) continue;
     const ref = { type: 'event', id: event.eventId, revision: event.revision },
       record = checks[claimIndex]?.cited.find(
@@ -2625,7 +2669,7 @@ const knowledgePolicy = `footballKnowledge contains versioned general rules fact
 const clock = (t) =>
   `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const orderingDimensionPolicy = `Keep the requested comparison dimension separate from chronological order. First/latest order events by time; longest/shortest require measured distance, and fastest/slowest require measured speed. A latest completed pass is not evidence of the longest pass. The current query contract orders by event time or group counts and does not compute distance/speed rankings. If the requested ranking cannot be established by the supplied tools and proofs, answer that limitation concisely rather than substituting a time-ordered action or guessing a recipient of an unestablished winner. Reviewers must reject that substitution even if the event, actor and recipient are individually correct.`;
-const premisePolicy = `The answer schema starts with premiseCheck. Fill this INTERNAL field before writing claims: questionAssumption describes the action or relationship the question assumes; recordedAction identifies what the supplied evidence actually establishes (including its actor); conclusion is supported, contradicted, unknown, or not-applicable. It is never displayed to the fan. When contradicted, claims correct the assumption; do not explain why the assumed action occurred. When unknown, do not invent a reason. Before writing, reconcile the question's premise with the actors in the supplied actions. A question is NOT evidence that its named player took a shot, missed, refused a pass, or caused an error. If the latest shot belongs to someone else, answer with that correction and the named player's actual recorded action. Never infer why an action did not occur from absence of an event. Chronology is not motivation: already passed earlier cannot explain why someone did not pass later. Do not write because, indicating, or showing unless that relationship is supported, rather than merely the component events. For an unrecorded reason, say briefly that you cannot tell why and give the useful recorded outcome; avoid listing unavailable measurements. A correction needs only one or two sentences. Example with fictional evidence: question "Why did Alex shoot?", evidence Ben shot and Alex passed to Ben: answer "That was Ben’s shot. Alex supplied the pass." End there. Do NOT append "why Alex shot is unknown" or list intentions/options; that reintroduces the disproved premise. This is an example of reasoning, not a fixed response. A question about forcing a turnover may be answered by identifying the recovery while saying its cause is unclear. The reviewer must reject a causal explanation based solely on prior actions or absent events, even if every action citation is correct.`;
+const premisePolicy = `The answer schema starts with premiseCheck. Fill this INTERNAL field before writing claims: questionAssumption describes the action or relationship the question assumes; recordedAction identifies what the supplied evidence actually establishes (including its actor); conclusion is supported, contradicted, unknown, or not-applicable. It is never displayed to the fan. When contradicted, claims correct the assumption; do not explain why the assumed action occurred. When unknown, do not invent a reason. Before writing, reconcile the question's premise with the actors in the supplied actions. A question is NOT evidence that its named player took a shot, missed, refused a pass, or caused an error. A neutral quantity question permits zero; it does not assert that any matching action occurred. When a complete source count answers zero, do not classify the question itself as contradicted or demand an extra correction paragraph. If the latest shot belongs to someone else, answer with that correction and the named player's actual recorded action. Never infer why an action did not occur from absence of an event. Chronology is not motivation: already passed earlier cannot explain why someone did not pass later. Do not write because, indicating, or showing unless that relationship is supported, rather than merely the component events. For an unrecorded reason, say briefly that you cannot tell why and give the useful recorded outcome; avoid listing unavailable measurements. A correction needs only one or two sentences. Example with fictional evidence: question "Why did Alex shoot?", evidence Ben shot and Alex passed to Ben: answer "That was Ben’s shot. Alex supplied the pass." End there. Do NOT append "why Alex shot is unknown" or list intentions/options; that reintroduces the disproved premise. This is an example of reasoning, not a fixed response. A question about forcing a turnover may be answered by identifying the recovery while saying its cause is unclear. The reviewer must reject a causal explanation based solely on prior actions or absent events, even if every action citation is correct.`;
 const assessmentPolicy = `Evaluative football questions deserve useful qualified judgment. For a best-player/standout assessment, compare received goals, explicit assists, shots and recoveries as relevant. Lead with a provisional pick (or no clear standout) and its strongest recorded reason, then at most one brief comparison/limitation: normally 2-3 sentences total. Never build a four-paragraph player report unless asked. An early thin record can support a tentative choice; lack of an official award is not a refusal reason. Label the pick as your assessment so far, not an official/full-match verdict. Do not invent player ratings, minutes, tackles, saves or intention. A recorded recovery is not automatically a key intervention.`;
 // Constrain the provider's wire format as well as validating its meaning locally.
 // JSON mode alone permits an uncited plain-text draft, which cannot be released.
@@ -5576,6 +5620,12 @@ export async function answerMatchQuestionAI(
                 }
               : message,
     );
+    if (stage === 'review')
+      messages = messages.map((message) =>
+        message.role === 'system'
+          ? { ...message, content: message.content + '\n' + quantityPopulationReviewPolicy }
+          : message,
+      );
     messages = messages.map((message) =>
       message.role === 'system'
         ? {
@@ -9134,6 +9184,7 @@ export async function answerMatchQuestionAI(
               proof.basis === 'trusted-event-schema',
           ) &&
           !canonicalScoreAnswer(factSelection, modelPacket.observedAt) &&
+          !canonicalZeroQuantityAnswer(factSelection, modelPacket) &&
           !canonicalOutcomeDistinction(factSelection, modelPacket) &&
           !canonicalRequestedEventOutcome(
             factSelection,

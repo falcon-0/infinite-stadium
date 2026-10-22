@@ -2958,3 +2958,93 @@ test('readiness limitation follows the absent attribute contract and does not as
     assert.ok(!buildQuestionFacts(bad).facts.some((f) => f.proof.dimension === 'readiness'));
   }
 });
+
+test('ordered saved-shot and linked keeper facts normalize to one complete source statement', () => {
+  const input = { kind: 'sustained', seed: 17, time: 120 };
+  const state = matchState(input);
+  const source = executeMatchQuery(input, {
+    filters: { type: 'shot', outcome: 'saved' },
+    aggregate: 'list',
+    order: 'desc',
+    limit: 1,
+    timeFrom: 0,
+    timeTo: 120,
+  });
+  const p = {
+    ...packet(),
+    observedAt: 120,
+    teams: state.metadata.teams,
+    roster: state.frames.at(-1).players,
+    requestedEvidence: [source],
+    queryResults: [source],
+    linkedContext: {
+      rows: [
+        ...state.events.filter((row) => !source.rows.some((current) => current.id === row.id)),
+        ...source.rows,
+      ],
+    },
+  };
+  const manifest = buildQuestionFacts(p);
+  const ordered = manifest.facts.find(
+    (f) => f.proof.kind === 'ordered-event' && f.proof.metric === 'savedShots',
+  );
+  const hold = manifest.facts.find(
+    (f) => f.proof.kind === 'linked-goalkeeper-hold' && f.proof.orderedShot,
+  );
+  assert.ok(ordered);
+  assert.ok(hold);
+  const selected = selectQuestionFacts(manifest, [ordered.id, hold.id]);
+  assert.equal(selected.claims.length, 1);
+  assert.match(selected.claims[0].text, /Latest shot saved: M\. Carter collected A\. Reed/);
+  assert.deepEqual(selected.originalToSelectedIndex, [0, 0]);
+  assert.deepEqual(selected.proofs[0].orderedShot, ordered.proof);
+  const evidence = selected.claims[0].evidence;
+  assert.equal(evidence.filter((ref) => ref.type === 'event').length, 2);
+  assert.equal(
+    new Set(evidence.map((ref) => `${ref.type}:${ref.id}@${ref.revision}`)).size,
+    evidence.length,
+  );
+  for (const change of [
+    (proof) => proof.orderedShot.event.revision++,
+    (proof) => (proof.orderedShot.order = 'asc'),
+    (proof) => (proof.shotId = 'unrelated'),
+  ]) {
+    const bad = structuredClone(manifest);
+    change(bad.facts.find((f) => f.id === hold.id).proof);
+    assert.equal(selectQuestionFacts(bad, [ordered.id, hold.id]).claims.length, 2);
+  }
+});
+
+test('legacy named roster data supports canonical goal identity without a raw-prose fallback', () => {
+  const input = { kind: 'central', seed: 17, time: 12 };
+  const state = matchState(input);
+  const source = executeMatchQuery(input, {
+    filters: { type: 'shot', result: true },
+    aggregate: 'list',
+    order: 'desc',
+    limit: 1,
+    timeFrom: 0,
+    timeTo: 12,
+  });
+  const manifest = buildQuestionFacts({
+    ...packet(),
+    observedAt: 12,
+    teams: state.metadata.teams,
+    roster: state.frames.at(-1).players,
+    requestedEvidence: [source],
+    queryResults: [source],
+    linkedContext: {
+      rows: [
+        ...state.events.filter((row) => !source.rows.some((current) => current.id === row.id)),
+        ...source.rows,
+      ],
+    },
+  });
+  const goal = manifest.facts.find(
+    (f) => f.proof.kind === 'ordered-event' && f.proof.metric === 'goals',
+  );
+  assert.ok(goal);
+  assert.match(goal.claim.text, /A\. Reed scores/);
+  assert.equal(goal.proof.event.playerId, 'home-10');
+  assert.equal(goal.proof.event.modelGenerated, false);
+});

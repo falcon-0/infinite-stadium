@@ -415,3 +415,18 @@ test('withdrawal fixture is available through actual loopback match and SSE rout
   assert.equal(received.eventHistory.get('withdrawal-17-shot@3').operation, 'delete');
   assert.equal(inferenceCalls, 0);
 });
+
+test('legacy roster frames retain the same source identity labels as their events', () => {
+  for (const kind of ['central', 'wide', 'withdrawal']) {
+    const feed = integratedFeed(kind, 17);
+    assert.ok(
+      feed.frames.every((frame) =>
+        frame.players.every((player) => typeof player.name === 'string' && player.name.length > 0),
+      ),
+    );
+    for (const event of feed.events.filter((event) => event.operation !== 'delete')) {
+      const player = feed.frames[0].players.find((player) => player.id === event.playerId);
+      assert.equal(player.name, event.player);
+    }
+  }
+});

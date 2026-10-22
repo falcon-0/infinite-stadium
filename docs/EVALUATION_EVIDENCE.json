@@ -1,11 +1,12 @@
 {
-  "schema": "infinite-stadium.public-evaluation-summary.v2",
-  "status": "Selected development evidence, not submission certification",
+  "schema": "infinite-stadium.public-evaluation-summary.v3",
+  "status": "Selected development evidence, not submission certification or organizer judging",
   "currentRelease": {
-    "date": "2026-10-21",
+    "name": "R14",
+    "date": "2026-10-22",
     "production": {
-      "id": "dpl_HybpPwWg5zzdL7rGNzMxSkKWCvio",
-      "url": "https://infinite-stadium-qb79mzfcs-falcon-266e.vercel.app",
+      "id": "dpl_68EAHziTRsKc4FtqfRjUJHYFm6pP",
+      "url": "https://infinite-stadium-oslc54i38-falcon-266e.vercel.app",
       "productionUrl": "https://infinite-stadium-lime.vercel.app",
       "readyState": "READY"
     },
@@ -13,104 +14,151 @@
       "passed": true,
       "allEightGates": true,
       "fullTests": {
-        "tests": 1311,
-        "pass": 1310,
+        "tests": 1352,
+        "pass": 1351,
         "fail": 0,
         "skipped": 1
-      },
-      "archiveSha256": "503d3b16d5966f16fdd50c8e057b5956e3eb11f794241cda1d9710dd34b27272",
-      "protectedVisualFiles": {
-        "index.html": "9636d3488b6081543fdd40f6f0d81b6b0ddaaa45b7aad79603e2c20c6ccd3da0",
-        "style.css": "681ebd8eb3922e29888e950ce391171e44f94fe6c65d81e55b3c8b7a2a88d234",
-        "fan-experience.css": "a3e721ab6501f03e5b7c61f2478439d66f0d3f89203ac1ee1d37a96dadad7f32",
-        "stream-ui.js": "1fb49e7721c8c1a4ee0bdae27774aec39a1539ba57b591f9aa184626c979cf58"
-      },
-      "allBackendBytesIdenticalToL": true,
-      "changedFiles": [
-        "fan-experience.css",
-        "index.html",
-        "style.css"
-      ],
-      "scope": "User-approved Montserrat font only; exact forward transformation verified. Original K native and L public AI evidence applies through backend byte identity; no new M model calls claimed."
-    },
-    "nativeEvidence": {
-      "release": "K",
-      "full": 6,
-      "partial": 0,
-      "failed": 0,
-      "report": "oct21-k-native-adjudication.json"
-    },
-    "publicEvidence": {
-      "release": "L",
-      "full": 4,
-      "partial": 0,
-      "failed": 0,
-      "seconds": [
-        3.686,
-        3.283,
-        4.46,
-        5.266
-      ],
-      "report": "oct21-l-public-adjudication.json"
-    },
-    "evidenceScope": "Small selected retunes, not representative accuracy or a controlled speed benchmark. M backend byte-identical to L/K. No new M AI inference claimed. Prior failures preserved.",
-    "uiEvidence": "L recorded-response 12/12 desktop/mobile checks; M exact three-file Montserrat change and public font check.",
-    "reviews": [
-      {
-        "kind": "delivery",
-        "score": 87,
-        "scope": "L whole-project internal review, before font-only M"
-      },
-      {
-        "kind": "ai",
-        "score": 86,
-        "scope": "L whole-project internal review, before font-only M"
-      },
-      {
-        "kind": "blind",
-        "score": 86,
-        "scope": "L whole-project internal review, before font-only M"
       }
-    ],
-    "targetScore": 100,
-    "targetReached": false,
-    "submissionReady": false,
-    "remaining": [
-      "Approved final Watch-only demo and public YouTube link",
-      "Matching current public GitHub provenance",
-      "Verify owner Azure expiry, credit and quota through judging",
-      "Broader unfamiliar-question reliability and variable latency remain limited"
-    ],
-    "budget": "Owner Azure, existing 900/day ledgers preserved; no cash/PAYG upgrade or account switch.",
-    "publication": "M live; no GitHub push, final submission or video publication."
+    },
+    "hostedRegression": {
+      "scope": "Six selected developer retune regressions, not overall accuracy or controlled latency comparison. First failures retained separately.",
+      "accepted": true,
+      "cases": [
+        {
+          "id": "fresh-french-recipient-and-failures",
+          "input": {
+            "kind": "sustained",
+            "seed": 17,
+            "time": 120,
+            "language": "fr",
+            "question": "À qui Cole a-t-il donné son dernier ballon réussi, et combien de passes a-t-il ratées depuis le début ?",
+            "conversation": []
+          },
+          "answer": "Dernière tentative de passe pour J. Cole: J. Cole a réussi une passe à A. Reed à 01:50. Club : Northbridge. J. Cole totalise 0 passes manquées.",
+          "accepted": true,
+          "serverElapsedMs": 12302,
+          "modelCalls": 3,
+          "limitation": null
+        },
+        {
+          "id": "fresh-keeper-before-goal",
+          "input": {
+            "kind": "sustained",
+            "seed": 17,
+            "time": 120,
+            "language": "en",
+            "question": "Before Reed scored, had Carter already collected a saved shot, or was that later?",
+            "conversation": []
+          },
+          "answer": "M. Carter collected A. Reed's saved shot at 01:38; the shot was at 01:36. First confirmed goal for A. Reed: A. Reed scores at 01:56. Club: Northbridge.",
+          "accepted": true,
+          "serverElapsedMs": 11199,
+          "modelCalls": 3,
+          "limitation": null
+        },
+        {
+          "id": "keeper-save-or-miss",
+          "input": {
+            "kind": "sustained",
+            "seed": 17,
+            "time": 120,
+            "language": "en",
+            "question": "Has either keeper actually made a save, or did those shots just miss?",
+            "conversation": []
+          },
+          "answer": "Latest shot saved: M. Carter collected A. Reed's saved shot at 01:38; the shot was at 01:36. Both teams combined: M. Carter leads with 1 saved shot collected.",
+          "accepted": true,
+          "serverElapsedMs": 9228,
+          "modelCalls": 3,
+          "limitation": null
+        },
+        {
+          "id": "unknown-ranking-independent-goal",
+          "input": {
+            "kind": "central",
+            "seed": 17,
+            "time": 12,
+            "language": "en",
+            "question": "Who completed the longest pass, and who scored the goal?",
+            "conversation": []
+          },
+          "answer": "A. Reed scores at 00:08. Club: Northbridge. I can't establish which pass was longest or shortest with the match measurements available here.",
+          "accepted": true,
+          "serverElapsedMs": 12276,
+          "modelCalls": 3,
+          "limitation": "Pass-distance ranking unavailable; honest boundary plus independent scorer"
+        },
+        {
+          "id": "public-fixture-independent-goal",
+          "input": {
+            "kind": "sustained",
+            "seed": 17,
+            "time": 120,
+            "language": "en",
+            "question": "Who completed the longest pass, and who scored the goal?",
+            "conversation": []
+          },
+          "answer": "I can't establish which pass was longest or shortest with the match measurements available here. Latest confirmed goal: A. Reed scores at 01:56. Club: Northbridge.",
+          "accepted": true,
+          "serverElapsedMs": 11789,
+          "modelCalls": 3,
+          "limitation": "Pass-distance ranking unavailable; honest boundary plus independent scorer"
+        },
+        {
+          "id": "spanish-shot-share",
+          "input": {
+            "kind": "sustained",
+            "seed": 17,
+            "time": 120,
+            "language": "es",
+            "question": "De todos los tiros del partido, ¿qué porcentaje fue a puerta? No me repitas el marcador.",
+            "conversation": []
+          },
+          "answer": "Ambos equipos combinados: 40% (2 de 5 tiros a puerta).",
+          "accepted": true,
+          "serverElapsedMs": 6000,
+          "modelCalls": 2,
+          "limitation": null
+        }
+      ],
+      "signedOutStatus": 401,
+      "logoutStatus": 200
+    },
+    "browserCheck": {
+      "origin": "https://infinite-stadium-lime.vercel.app",
+      "scope": "Actual public UI and Azure calls in an isolated headless browser; no mocked model responses or owner-tab interaction.",
+      "requests": [
+        {
+          "kind": "sustained",
+          "seed": 17,
+          "time": 106,
+          "question": "À qui Cole a-t-il donné son dernier ballon réussi, et combien de passes a-t-il ratées depuis le début ?",
+          "language": "fr",
+          "conversation": [],
+          "audience": "newcomer",
+          "favoriteClub": null,
+          "favoritePlayer": null
+        }
+      ],
+      "pageErrors": [],
+      "clockAfterAnswer": "02:00",
+      "passed": true,
+      "answer": "Dernière tentative de passe pour J. Cole: J. Cole a réussi une passe à A. Reed à 01:42. Club : Northbridge. J. Cole totalise 0 passes manquées.",
+      "answerEvidencePin": 106,
+      "modelCalls": 3,
+      "elapsedMs": 12842,
+      "logoutStatus": 200
+    },
+    "uiScope": "Accepted Watch layout, styles, pitch and chat UI byte-identical to the preceding production release. No redesign."
   },
-  "historicalAdverseResults": [
-    {
-      "release": "F",
-      "native": "2 full, 1 partial, 3 failed; includes provider429",
-      "deployed": false
-    },
-    {
-      "release": "G",
-      "native": "1 full, 5 failed; wrong actor and withholding/composition failures",
-      "deployed": false
-    },
-    {
-      "release": "H",
-      "native": "0 full, 6 failed; four transport failures and two invalid operations",
-      "deployed": false
-    },
-    {
-      "release": "J",
-      "native": "5 full, 1 failed; compound follow-up withheld",
-      "deployed": false
-    }
+  "limitations": [
+    "These selected, retuned questions do not estimate unfamiliar-question accuracy or establish a controlled latency improvement.",
+    "One keeper answer still includes a supported but unnecessary collection ranking.",
+    "The short synthetic passages do not establish a full-match player award or a future winner.",
+    "Unavailable pass-distance rankings, intentions and tactical causes must not be invented.",
+    "Azure responses and latency depend on the configured account, quota, credit and network. Judging-period provider continuity remains unverified.",
+    "The public browser check is one desktop journey, not broad device validation or representative fan research.",
+    "Final submission video approval and submission completeness remain separate delivery checks."
   ],
-  "limits": [
-    "Small selected retunes are not representative accuracy or controlled latency evidence.",
-    "Automated/source-informed reviews are not organizer grades or human participants.",
-    "M uses unchanged K/L backend evidence, not fictitious new model runs.",
-    "Detailed historical diaries, raw traces and deployment receipts are preserved locally and excluded from the public source.",
-    "Later unfamiliar-question tests remain separately attributed, including failures."
-  ]
+  "reviewStatus": "Independent internal reviews are being refreshed; no new score is claimed by this record."
 }

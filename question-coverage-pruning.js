@@ -64,7 +64,16 @@ export function pruneUncoveredCanonicalFacts(answer, review) {
     new Set(canonical.values()).size !== canonical.size ||
     [...canonical].some(
       ([index, id]) =>
-        claims[index].kind !== 'observation' || !selection.selectedFactIds.includes(id),
+        !['observation', 'limitation'].includes(claims[index].kind) ||
+        (claims[index].kind === 'limitation' &&
+          !selection.proofs.some(
+            (proof) =>
+              proof.factId === id &&
+              proof.kind === 'source-measurement-limitation' &&
+              proof.basis === 'trusted-event-schema' &&
+              proof.modelGenerated === false,
+          )) ||
+        !selection.selectedFactIds.includes(id),
     )
   )
     return unchanged();
@@ -81,7 +90,46 @@ export function pruneUncoveredCanonicalFacts(answer, review) {
     )
   )
     return unchanged();
-  const keep = new Set(coverage.flatMap((part) => part.claimIndices));
+  const provedLimitations = new Map(
+    [...canonical].filter(
+      ([index, id]) =>
+        claims[index].kind === 'limitation' &&
+        selection.proofs.some(
+          (proof) =>
+            proof.factId === id &&
+            proof.kind === 'source-measurement-limitation' &&
+            proof.basis === 'trusted-event-schema' &&
+            proof.modelGenerated === false,
+        ),
+    ),
+  );
+  const effectiveCoverage = coverage.map((part) => {
+    if (part.answerForm !== 'unavailable-measurement' || part.temporalRelation !== 'none')
+      return part;
+    const limitations = part.claimIndices.filter((index) => {
+      const factId = provedLimitations.get(index);
+      return (
+        factId &&
+        selection.proofs.some(
+          (proof) =>
+            proof.factId === factId &&
+            proof.requestSpan === part.requestSpan &&
+            proof.dimension === 'passDistanceRanking',
+        )
+      );
+    });
+    // An observation cannot establish a source-declared absent measurement.
+    // Other request components and explicit dependencies still retain their facts.
+    if (!limitations.length) return part;
+    return {
+      ...part,
+      claimIndices: part.claimIndices.filter(
+        (index) => !canonical.has(index) || provedLimitations.has(index),
+      ),
+    };
+  });
+  const keep = new Set(effectiveCoverage.flatMap((part) => part.claimIndices));
+  for (const index of provedLimitations.keys()) keep.add(index);
   // Model prose is never deleted or silently detached from declared support.
   for (let index = 0; index < claims.length; index++) if (!canonical.has(index)) keep.add(index);
   for (const part of coverage) {
@@ -183,7 +231,7 @@ export function pruneUncoveredCanonicalFacts(answer, review) {
       selectedIndices: item.selectedIndices.map((index) => factMap[index]),
     })),
   };
-  mappedReview.requestCheck.coverage = coverage.map((part) => ({
+  mappedReview.requestCheck.coverage = effectiveCoverage.map((part) => ({
     ...structuredClone(part),
     claimIndices: part.claimIndices.map((index) => claimMap[index]),
     ...(Object.hasOwn(part, 'relationAnchorClaimIndex')
