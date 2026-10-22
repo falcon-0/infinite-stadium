@@ -20425,3 +20425,306 @@ test('unknown ranked pass keeps independent goal identities but not a guessed re
     'known counts use their separately required canonical facts',
   );
 });
+
+test('named-event temporal prefixes remain in coverage components beside later alternatives', () => {
+  for (const prefix of [
+    'Before Reed scored, had Carter already collected a saved shot',
+    'After Costa lost the ball, did Cole recover it',
+    'Avant le but de Reed, qui avait récupéré le ballon',
+    'Antes del gol de Reed, quién recuperó el balón',
+    'Depois do passe de Cole, quem recebeu a bola',
+  ]) {
+    assert.deepEqual(requestComponents(prefix + ', or was that later?'), [
+      prefix + ', or was that later',
+    ]);
+  }
+  assert.deepEqual(requestComponents('Had Carter already collected a saved shot?'), [
+    'Had Carter already collected a saved shot',
+  ]);
+});
+
+test('an exact linked keeper hold proves positive chronology before an ordered goal anchor', async () => {
+  const question = {
+    kind: 'sustained',
+    seed: 17,
+    time: 120,
+    question: 'Before Reed scored, had Carter already collected a saved shot, or was that later?',
+  };
+  let captured, review;
+  const mock = sequenceTransport([
+    {
+      mentionedPlayers: ['A. Reed', 'M. Carter'],
+      decision: {
+        kind: 'queries',
+        queries: [
+          {
+            filters: {
+              type: 'recovery',
+              player: 'away-1',
+              recoveryKind: 'goalkeeper-hold',
+              linkedShotOutcome: 'saved',
+            },
+            aggregate: 'list',
+            order: 'asc',
+            limit: 1,
+          },
+          {
+            filters: { type: 'shot', player: 'home-10', outcome: 'goal' },
+            aggregate: 'list',
+            order: 'asc',
+            limit: 1,
+          },
+        ],
+      },
+    },
+    (packet) => {
+      const hold = packet.matchFacts.facts.find(
+        (f) => f.selection.kind === 'linked-goalkeeper-hold',
+      );
+      const goal = packet.matchFacts.facts.find(
+        (f) => f.selection.kind === 'ordered-event' && f.selection.metric === 'goals',
+      );
+      assert.ok(hold);
+      assert.ok(goal);
+      return {
+        scope: 'match',
+        composition: { mode: 'facts', factIds: [hold.id, goal.id] },
+        followUp: '',
+      };
+    },
+    (packet) => {
+      captured = packet;
+      review = {
+        decision: 'approve',
+        requestCheck: {
+          requestedInformation: question.question,
+          status: 'answered',
+          reason: 'Current keeper collection precedes the identified goal.',
+          coverage: [
+            {
+              requestSpan: packet.requestComponents[0],
+              claimIndices: [0, 1],
+              answerForm: 'fact',
+              requestedAction: 'recovery',
+              temporalRelation: 'before-requested-event',
+              relationAnchorClaimIndex: 1,
+              relationEntityBinding: 'none',
+            },
+          ],
+        },
+      };
+      return review;
+    },
+  ]);
+  const result = await answerMatchQuestionAI(question, { config, fetcher: mock.fetcher });
+  assert.equal(result.execution.modelCalls, 3);
+  assert.match(result.answer, /Carter.*01:38.*Reed.*01:56/);
+  assert.equal(result.relationWitnesses[0].relation, 'before');
+  assert.equal(result.relationWitnesses[0].witnessTime, 98);
+  assert.equal(result.relationWitnesses[0].anchorTime, 116);
+  assert.equal(result.relationWitnesses[0].proves, 'positive-existence');
+  const check = (r = review, selection = captured.canonicalFactSelection) =>
+    reviewRequestAdequacy(r, captured.answer, captured.evidence, {
+      canonicalFactSelection: selection,
+    });
+  assert.deepEqual(check(), []);
+  for (const change of [
+    (p) => p.proofs[0].revision++,
+    (p) => (p.proofs[0].time = 117),
+    (p) => (p.proofs[0].modelGenerated = true),
+    (p) => (p.proofs[1] = p.proofs[1].event),
+  ]) {
+    const bad = structuredClone(captured.canonicalFactSelection);
+    change(bad);
+    assert.ok(check(review, bad).length);
+  }
+  for (const change of [
+    { temporalRelation: 'after-requested-event' },
+    { relationEntityBinding: 'same-player' },
+    { requestedAction: 'pass' },
+  ]) {
+    const bad = structuredClone(review);
+    Object.assign(bad.requestCheck.coverage[0], change);
+    assert.ok(check(bad).length);
+  }
+});
+
+test('fronted temporal alternatives stay together without collapsing ordinary multipart requests', () => {
+  for (const question of [
+    'Before the goal, did Cole pass, or did Reed shoot',
+    'Avant le but, qui a tiré, ou qui a récupéré le ballon',
+    'Antes del gol, quién disparó, o quién recuperó el balón',
+    'Depois do gol, quem rematou, ou quem recuperou a bola',
+  ])
+    assert.deepEqual(requestComponents(question + '?'), [question]);
+  assert.deepEqual(requestComponents('Who scored, and who assisted?'), [
+    'Who scored',
+    'who assisted',
+  ]);
+  assert.deepEqual(requestComponents('Did Cole help create the goal, or was he just nearby?'), [
+    'Did Cole help create the goal',
+    'was he just nearby',
+  ]);
+});
+
+test('temporal alternatives do not collapse later independent role questions', () => {
+  const temporal = 'Before Reed scored, had Carter collected a shot';
+  const role = 'Cole scored the goal, did he, or was his role different';
+  const expected = [temporal, 'Cole scored the goal, did he', 'was his role different'];
+  assert.deepEqual(requestComponents(temporal + '? ' + role + '?'), expected);
+  assert.deepEqual(
+    requestComponents(temporal + ', and did Cole score, or was his role different?'),
+    [temporal, 'did Cole score', 'was his role different'],
+  );
+});
+
+test('a neutral French zero count reaches independent review without a redundant correction rewrite', async () => {
+  const question = {
+    kind: 'sustained',
+    seed: 17,
+    time: 120,
+    language: 'fr',
+    question:
+      'À qui Cole a-t-il donné son dernier ballon réussi, et combien de passes a-t-il ratées depuis le début ?',
+  };
+  let reviewed = false;
+  const responses = [
+    {
+      mentionedPlayers: ['J. Cole'],
+      requestedForm: 'fact',
+      decision: {
+        kind: 'queries',
+        queries: [
+          {
+            filters: { type: 'pass', player: 'home-7' },
+            aggregate: 'list',
+            order: 'desc',
+            limit: 1,
+          },
+          { filters: { type: 'pass', player: 'home-7' }, aggregate: 'count' },
+        ],
+      },
+    },
+    (packet) => {
+      const pass = packet.matchFacts.facts.find(
+        (f) =>
+          f.selection.kind === 'ordered-event' &&
+          f.selection.metric === 'passes' &&
+          f.selection.subjectId === 'home-7',
+      );
+      const zero = packet.matchFacts.facts.find(
+        (f) =>
+          f.selection.kind === 'count' &&
+          f.selection.metric === 'failedPasses' &&
+          f.selection.subjectId === 'home-7',
+      );
+      assert.ok(pass && zero);
+      return {
+        premiseCheck: {
+          questionAssumption: 'Cole missed passes',
+          recordedAction: 'Cole has zero failed passes',
+          conclusion: 'contradicted',
+        },
+        scope: 'match',
+        composition: { mode: 'facts', factIds: [pass.id, zero.id] },
+        followUp: '',
+      };
+    },
+    (packet) => {
+      reviewed = true;
+      return {
+        decision: 'approve',
+        requestCheck: {
+          status: 'answered',
+          requestedInformation: question.question,
+          responseIntent: {
+            purpose: 'fact-retrieval',
+            needsAssessment: false,
+            needsExplicitCorrection: false,
+            needsScoreline: false,
+            needsMeasurementLimitation: false,
+            reason: 'Neutral count permits zero.',
+          },
+          coverage: packet.requestComponents.map((requestSpan, index) => ({
+            requestSpan,
+            claimIndices: [index],
+            answerForm: 'fact',
+            requestedAction: 'pass',
+            temporalRelation: 'none',
+            ...(index
+              ? {
+                  requestedQuantity: [
+                    {
+                      requestSpan,
+                      action: 'pass',
+                      state: 'unsuccessful',
+                      grouping: 'named-entity',
+                      subjectIds: ['home-7'],
+                      timeFrom: 0,
+                      timeTo: 120,
+                      timeFromExclusive: null,
+                      timeToExclusive: null,
+                      qualifiers: null,
+                    },
+                  ],
+                }
+              : {}),
+          })),
+          reason: 'Recipient and exact player failed-pass count are proved.',
+        },
+      };
+    },
+  ];
+  const mock = sequenceTransport(responses);
+  const answer = await answerMatchQuestionAI(question, { config, fetcher: mock.fetcher }).catch(
+    (error) => assert.fail(JSON.stringify(error.feedback || { message: error.message })),
+  );
+  assert.equal(reviewed, true);
+  assert.equal(answer.execution.modelCalls, 3);
+  assert.match(answer.answer, /Cole.*Reed.*01:50/);
+  assert.match(answer.answer, /0 passes manquées/);
+  for (const [name, change] of [
+    [
+      'explicit correction still required',
+      (review) => {
+        review.requestCheck.responseIntent.needsExplicitCorrection = true;
+      },
+    ],
+    [
+      'wrong player',
+      (review) => {
+        review.requestCheck.coverage[1].requestedQuantity[0].subjectIds = ['away-7'];
+      },
+    ],
+    [
+      'wrong outcome',
+      (review) => {
+        review.requestCheck.coverage[1].requestedQuantity[0].state = 'pending';
+      },
+    ],
+    [
+      'wrong window',
+      (review) => {
+        review.requestCheck.coverage[1].requestedQuantity[0].timeFrom = 30;
+      },
+    ],
+  ]) {
+    const negative = sequenceTransport([
+      ...responses.slice(0, 2),
+      (packet) => {
+        const review = responses[2](packet);
+        change(review);
+        return review;
+      },
+    ]);
+    await assert.rejects(
+      answerMatchQuestionAI(question, {
+        config,
+        fetcher: negative.fetcher,
+        canRepair: () => false,
+      }),
+      (error) => error.code === 'question-withheld',
+      name,
+    );
+  }
+});
