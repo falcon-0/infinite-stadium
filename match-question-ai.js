@@ -3529,9 +3529,12 @@ function compositionSchema(
           factIds: { type: 'array', minItems: 1, maxItems: 4, items: ids },
         }),
       );
-    const stories = manifest.facts.filter((fact) =>
-      ['linked-goal-sequence', 'linked-shot-supply'].includes(fact.proof.kind),
-    );
+    const stories =
+      explanationTarget === 'observed-sequence'
+        ? sourceScopedSequenceFacts(manifest, context.requestedEvidence)
+        : manifest.facts.filter((fact) =>
+            ['linked-goal-sequence', 'linked-shot-supply'].includes(fact.proof.kind),
+          );
     if (requestedForm === 'explanation' && stories.length)
       modes.push(
         strictObject({
@@ -4088,6 +4091,34 @@ function compositionSchema(
       );
     }
     schema.properties.composition.anyOf = sequenceModes;
+  }
+  const endpointStories = sequenceStories.filter(
+    (fact) =>
+      fact.proof.eventId === context.requestedNamedShot?.id &&
+      fact.proof.revision === context.requestedNamedShot?.revision,
+  );
+  if (
+    !context.repair &&
+    requestedForm === 'explanation' &&
+    explanationTarget === 'observed-sequence' &&
+    context.componentCount === 1 &&
+    context.requestedNamedShot &&
+    endpointStories.length === 1
+  ) {
+    // This single source-proved story already answers the bounded buildup.
+    // Unrelated global facts and a repeated qualitative paragraph add no
+    // requested information. Repairs retain the independent review's scope.
+    schema.properties.composition.anyOf = [
+      strictObject({
+        mode: { type: 'string', enum: ['facts'] },
+        factIds: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 1,
+          items: { type: 'string', enum: [endpointStories[0].id] },
+        },
+      }),
+    ];
   }
   const selectable = manifest.facts.filter(
     (fact) =>
@@ -4726,6 +4757,33 @@ export function explicitNamedShotStatus(input, roster, events) {
     )
   )
     return null;
+  return explicitNamedShotAnchor(input, roster, events);
+}
+// Resolve only an explicit actor/action/clock tuple, never a nearby event.
+export function explicitNamedShotAnchor(input, roster, events) {
+  const references = explicitNamedShotReferences(input.question, roster),
+    found = events.filter(
+      (event) =>
+        event.type === 'shot' &&
+        event.operation !== 'delete' &&
+        references.some((ref) => ref.playerId === event.playerId && ref.time === event.time) &&
+        event.time <= input.time &&
+        event.arrivedAt <= input.time &&
+        ['pending', 'goal', 'saved', 'blocked', 'off-target'].includes(
+          actionOutcome(event)?.status,
+        ),
+    );
+  const unique = [
+    ...new Map(
+      found.map((event) => [
+        identity({ type: 'event', id: event.id, revision: event.revision }),
+        event,
+      ]),
+    ).values(),
+  ];
+  return unique.length === 1 ? unique[0] : null;
+}
+function explicitNamedShotReferences(question, roster) {
   const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
     found = [];
   for (const player of roster)
@@ -4737,29 +4795,9 @@ export function explicitNamedShotStatus(input, roster, events) {
         'gi',
       );
       for (const match of question.matchAll(pattern))
-        for (const event of events) {
-          const status = actionOutcome(event)?.status;
-          if (
-            event.type === 'shot' &&
-            event.operation !== 'delete' &&
-            event.playerId === player.id &&
-            event.time === Number(match[1]) * 60 + Number(match[2]) &&
-            event.time <= input.time &&
-            event.arrivedAt <= input.time &&
-            ['pending', 'goal', 'saved', 'blocked', 'off-target'].includes(status)
-          )
-            found.push(event);
-        }
+        found.push({ playerId: player.id, time: Number(match[1]) * 60 + Number(match[2]) });
     }
-  const unique = [
-    ...new Map(
-      found.map((event) => [
-        identity({ type: 'event', id: event.id, revision: event.revision }),
-        event,
-      ]),
-    ).values(),
-  ];
-  return unique.length === 1 ? unique[0] : null;
+  return [...new Map(found.map((ref) => [JSON.stringify(ref), ref])).values()];
 }
 function validateAnswer(value, inventory, knowledge, { provedSequenceIndices = new Set() } = {}) {
   if (
@@ -6500,6 +6538,7 @@ export async function answerMatchQuestionAI(
           componentCount: modelPacket.requestComponents?.length,
           requestComponents: modelPacket.requestComponents,
           requestedEventReference: modelPacket.requestedMoment?.reference,
+          requestedNamedShot: explicitNamedShotAnchor(input, roster, [...sourceById.values()]),
           requestedEventPlayerId: sourceById.get(modelPacket.requestedMoment?.id)?.playerId,
           requestedEvidence: modelPacket.requestedEvidence,
           recordedActionLinks: sourceSequenceLinks(modelPacket),
@@ -7124,6 +7163,9 @@ export async function answerMatchQuestionAI(
     packet.linkedContext = linkedMatchEvidence(
       state,
       [
+        requestedForm === 'explanation' && explanationTarget === 'observed-sequence'
+          ? packet.requestedMoment?.id
+          : null,
         ...planned
           .filter((q) => q.query.aggregate === 'list')
           .flatMap((q) => q.rows.map((r) => r.id))
@@ -8520,6 +8562,60 @@ export async function answerMatchQuestionAI(
   else if (Object.hasOwn(first, 'draft') && first.draft !== null && !first.queries?.length)
     rawDraft = first.draft;
   else {
+    const sequenceEvent =
+      requestedForm === 'explanation' && explanationTarget === 'observed-sequence'
+        ? explicitNamedShotAnchor(input, roster, [...sourceById.values()])
+        : null;
+    if (sequenceEvent) {
+      // This endpoint has its own inclusive source. The predecessor query keeps
+      // its exclusive boundary, so ordinary before/after evidence is unchanged.
+      const source = run({ filters: { id: sequenceEvent.id }, aggregate: 'list', limit: 1 });
+      if (source.rows.length === 1 && source.rows[0].revision === sequenceEvent.revision) {
+        planned.push(source);
+        packet.requestedMoment = {
+          id: sequenceEvent.id,
+          type: sequenceEvent.type,
+          time: sequenceEvent.time,
+          reference: { type: 'event', id: sequenceEvent.id, revision: sequenceEvent.revision },
+        };
+        if (sequenceEvent.passId && ['home', 'away'].includes(sequenceEvent.team)) {
+          // Execute the recorded predecessor link separately. This proves a
+          // same-team action before this exact endpoint, never "last pass" or
+          // intention, and does not broaden the planner's original window.
+          const predecessor = run({
+            filters: { id: sequenceEvent.passId, type: 'pass', team: sequenceEvent.team },
+            aggregate: 'list',
+            limit: 1,
+            timeFrom: 0,
+            timeTo: sequenceEvent.time,
+            timeToExclusive: true,
+          });
+          if (predecessor.rows.length === 1) {
+            const queryIndex = planned.length;
+            planned.push(predecessor);
+            queryRelations.push({
+              queryIndex,
+              relation: 'before',
+              sameTeam: true,
+              samePlayer: false,
+              anchor: packet.requestedMoment.reference,
+              anchorTime: sequenceEvent.time,
+              anchorTeam: sequenceEvent.team,
+              anchorPlayerId: sequenceEvent.playerId,
+              anchorIdentifiedBy: 'requested-moment',
+              query: predecessor.query,
+              scopeReference: predecessor.scopeReference,
+              anchorScope: source.scopeReference,
+              resultEvents: predecessor.rows.map((row) => ({
+                type: 'event',
+                id: row.id,
+                revision: row.revision,
+              })),
+            });
+          }
+        }
+      }
+    }
     const statusEvent = explicitNamedShotStatus(input, roster, [...sourceById.values()]);
     if (statusEvent) {
       const query = run({ filters: { id: statusEvent.id }, aggregate: 'list', limit: 1 });
@@ -8757,6 +8853,23 @@ export async function answerMatchQuestionAI(
         ...(explanationTarget ? { explanationTarget } : {}),
         ...(answerFocus ? { answerFocus } : {}),
       });
+      if (
+        requestedForm === 'explanation' &&
+        explanationTarget === 'observed-sequence' &&
+        explicitNamedShotReferences(input.question, roster).length > 0
+      ) {
+        const reference = sequenceEvent && packet.requestedMoment?.reference;
+        matchFactManifest = {
+          ...matchFactManifest,
+          facts: matchFactManifest.facts.filter(
+            (fact) =>
+              !['linked-shot-supply', 'linked-goal-sequence'].includes(fact.proof.kind) ||
+              (reference &&
+                fact.proof.eventId === reference.id &&
+                fact.proof.revision === reference.revision),
+          ),
+        };
+      }
       requiredMixedCountIds = mixedKnownQuantityFacts(matchFactManifest, modelPacket);
       requiredMeasurementIds = matchFactManifest.facts
         .filter(
@@ -9189,6 +9302,14 @@ export async function answerMatchQuestionAI(
               (proof.kind === 'team-comparison' && proof.metric === 'shotsOnTargetFaced'),
           ) &&
           !canonicalOutcomeDistinction(factSelection, modelPacket) &&
+          !(
+            explanationTarget === 'observed-sequence' &&
+            factSelection.proofs.length === 1 &&
+            sourceScopedSequenceFacts(
+              { facts: [{ proof: factSelection.proofs[0], claim: factSelection.claims[0] }] },
+              modelPacket.requestedEvidence,
+            ).length === 1
+          ) &&
           !canonicalAttributedRoleCorrection(
             factSelection,
             { ...candidate, claims: factSelection.claims },
