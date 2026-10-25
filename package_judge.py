@@ -6,6 +6,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent
 REQUIRED_FILES = (
+    "ai/answer-schema.js", "ai/composition-schema.js",
     "README.md", "package.json", "package-lock.json", ".prettierrc.json", ".prettierignore", ".gitattributes", "docs/CONTRIBUTING.md", "requirements-local.txt", "requirements-local-lock.txt",
     "index.html", "style.css", "fan-experience.css", "Dockerfile", ".dockerignore",
     ".gitignore", ".env.example", "docs/VALIDATION_PLAN.md", "docs/RESEARCH.md",

@@ -10,7 +10,7 @@ Git attributes keep text line endings consistent across Windows and Linux. Run `
 
 1. `match-chat-ui.js` captures the match timestamp. `match-chat-state.js` owns conversation state; asking must not stop playback.
 2. `answerMatchQuestionAI` in `match-question-ai.js` coordinates input validation, semantic planning, canonical selection, independent review and bounded repair.
-3. `question-policies.js` contains the model instructions. A prompt change requires new live evaluation, not just passing unit tests.
+3. `question-policies.js` contains the model instructions. `ai/answer-schema.js` owns the shared answer contract; `ai/composition-schema.js` owns allowed writer compositions and their source-selection helpers. Neither schema module calls a model. The orchestrator imports these contracts and retains their existing public helper exports. A prompt or schema behavior change requires new live evaluation, not just passing unit tests.
 4. `question-query-normalization.js` normalizes proposed tool arguments; `question-planning-tools.js` owns read-only query augmentation and component time-window binding. `match-query.js` executes read-only queries; `match-operation-proof.js` computes comparisons.
 5. `question-facts.js` creates verified claims and proofs. `question-writer-packet.js` reduces writer payloads without mutating complete evidence.
 6. `question-evidence-check.js`, `claim-guards.js` and the review helpers check support and coverage. Text guards are supplementary defenses, not substitutes for typed event, scope and revision proofs.
