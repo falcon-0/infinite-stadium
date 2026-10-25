@@ -504,3 +504,55 @@ test(
     }
   },
 );
+
+test('question failures correlate sanitized server diagnostics with a generated response ID and keep public errors private', async (t) => {
+  const records = [],
+    secret = 'PRIVATE_QUESTION_COOKIE_TOKEN_MODEL_PROSE';
+  let providerCalls = 0;
+  const base = await start(
+    t,
+    {
+      AZURE_OPENAI_ENDPOINT: 'https://test.openai.azure.com',
+      AZURE_OPENAI_DEPLOYMENT: 'test',
+      AZURE_OPENAI_API_KEY: secret,
+    },
+    {
+      questionFailureLogger: (record) => records.push(record),
+      fetcher: async () => {
+        providerCalls++;
+        throw new Error(secret);
+      },
+    },
+  );
+  const response = await fetch(base + '/api/agent/question', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Request-Id': secret },
+    body: JSON.stringify({
+      kind: 'sustained',
+      seed: 17,
+      time: 80,
+      language: 'fr',
+      question: 'Comment l’action s’est-elle construite avant le tir de Reed à 01:14 ?',
+    }),
+  });
+  assert.equal(response.status, 502);
+  assert.equal(providerCalls, 1);
+  assert.equal(records.length, 1);
+  const publicBody = await response.json(),
+    requestId = response.headers.get('x-request-id');
+  assert.match(requestId, /^[0-9a-f-]{36}$/i);
+  assert.equal(records[0].requestId, requestId);
+  assert.deepEqual(Object.keys(publicBody).sort(), ['code', 'error']);
+  assert.equal(records[0].code, 'azure-network');
+  assert.equal(records[0].modelCalls, 1);
+  assert.deepEqual(
+    records[0].stages.map((stage) => [stage.stage, stage.outcome]),
+    [['answer-or-query', 'failed']],
+  );
+  assert.ok(records[0].timings.handlerMs >= 0);
+  assert.ok(records[0].timings.requestBodyMs >= 0);
+  assert.equal(records[0].timings.wrapperMs, null);
+  assert.doesNotMatch(JSON.stringify(records), new RegExp(secret));
+  assert.doesNotMatch(JSON.stringify(publicBody), /diagnostic|predicate|prompt|feedback|PRIVATE_/i);
+  assert.equal((await fetch(base + '/question-diagnostics.js')).status, 404);
+});

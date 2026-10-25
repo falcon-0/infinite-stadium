@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
 import {
   explicitPendingCountAction,
+  endpointStoryExtraRequirements,
   bindComponentWindowQueries,
   mixedKnownQuantityFacts,
   requestedPlayerRankings,
@@ -5202,9 +5203,13 @@ test('a provisional player pick is concise and must use that player’s own cont
       },
       (packet, body) => {
         assert.deepEqual(
-          resolvedWireSchema(body).properties.composition.anyOf.map(
-            (mode) => mode.properties.mode.enum[0],
-          ),
+          [
+            ...new Set(
+              resolvedWireSchema(body).properties.composition.anyOf.map(
+                (mode) => mode.properties.mode.enum[0],
+              ),
+            ),
+          ],
           ['player-pick'],
         );
         const goal = packet.matchFacts.facts.find(
@@ -17550,6 +17555,23 @@ test('ranking counterpart requires explicit top-one grouping and preserves exact
   assert.deepEqual(executed.filters, limited.query.filters);
   assert.equal(executed.timeToExclusive, true);
   assert.equal(full.truncated, false);
+  const defaultOrdered = { ...query, groupOrder: undefined };
+  const canonicalDefault = executeMatchQuery(input, defaultOrdered);
+  assert.equal(canonicalDefault.query.groupOrder, 'count-desc');
+  assert.equal(
+    requestedPlayerRankings([defaultOrdered], (q) => executeMatchQuery(input, q), [
+      canonicalDefault,
+    ])[0].truncated,
+    false,
+    'Only the executed canonical default, not an assumed planner order, licenses complete ranking augmentation',
+  );
+  const nameOrdered = { ...query, groupOrder: 'name' };
+  assert.deepEqual(
+    requestedPlayerRankings([nameOrdered], () => assert.fail('Name order is not a ranking'), [
+      executeMatchQuery(input, nameOrdered),
+    ]),
+    [],
+  );
   for (const changes of [
     { groupOrder: undefined },
     { limit: 3 },
@@ -20942,7 +20964,7 @@ for (const [language, question] of [
               requestedAction: 'other',
               temporalRelation: 'before-requested-event',
               relationAnchorClaimIndex: 0,
-              relationEntityBinding: 'same-team',
+              relationEntityBinding: 'same-player',
               relationSourceLinkIndex: null,
               explanationTarget: 'observed-sequence',
             })),
@@ -21185,4 +21207,973 @@ test('a bare clock team buildup keeps source-scoped sequence facts without inven
   assert.equal(result.execution.modelCalls, 3);
   assert.match(result.answer, /01:14/);
   assert.match(result.answer, /01:08/);
+});
+
+test('failure diagnostics identify a failed claim-support predicate despite reviewer approval without recording prose', async () => {
+  const diagnostics = [];
+  const mock = directTransport(
+    { draft, queries: [] },
+    {
+      decision: 'approve',
+      reason: 'PRIVATE_REVIEW_REASON',
+      checks: draft.claims.map((_, claimIndex) => ({
+        claimIndex,
+        actors: [],
+        inventedFacts: [],
+        counts: [],
+        shotOutcomeAssertions: [],
+        supported: false,
+        reason: 'PRIVATE_REVIEW_REASON',
+      })),
+    },
+  );
+  await assert.rejects(
+    answerMatchQuestionAI(input, {
+      config,
+      fetcher: mock.fetcher,
+      onDiagnostic: (event) => diagnostics.push(event),
+    }),
+    (error) => error.code === 'question-withheld',
+  );
+  const review = diagnostics.find((event) => event.type === 'review');
+  assert.ok(review);
+  assert.equal(review.decision, 'approve');
+  assert.equal(review.reviewComplete, false);
+  assert.equal(review.predicates.claimSupport, false);
+  assert.equal(review.actorIssueCount, 0);
+  assert.equal(review.countIssueCount, 0);
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.type === 'stage' && event.stage === 'review' && event.outcome === 'completed',
+    ),
+  );
+  assert.doesNotMatch(JSON.stringify(diagnostics), /PRIVATE_REVIEW_REASON/);
+});
+
+test('a qualitative standout pick and its supporting why recover the actual contradictory planner classification', async () => {
+  const question = {
+    kind: 'sustained',
+    seed: 17,
+    time: 80,
+    language: 'en',
+    question: 'Who’s standing out so far, and why?',
+  };
+  const mock = sequenceTransport([
+    {
+      answerFocus: 'player-assessment',
+      explanationTarget: 'decision-rationale',
+      requestedForm: 'explanation',
+      mentionedPlayers: [],
+      decision: {
+        kind: 'queries',
+        queries: [
+          {
+            filters: { type: 'pass', result: true },
+            aggregate: 'by-player',
+            groupOrder: 'count-desc',
+            order: 'desc',
+            limit: 3,
+            timeFrom: 0,
+            timeTo: 80,
+          },
+        ],
+      },
+    },
+    (packet, body) => {
+      assert.equal(packet.requestedForm, 'assessment');
+      assert.equal(packet.explanationTarget, 'other');
+      const modes = resolvedWireSchema(body).properties.composition.anyOf;
+      assert.deepEqual(
+        [...new Set(modes.map((mode) => mode.properties.mode.enum[0]))],
+        ['player-pick'],
+      );
+      const fact = packet.matchFacts.facts.find(
+        (f) =>
+          f.selection.kind === 'count' &&
+          f.claim.text.includes('J. Cole') &&
+          f.claim.text.includes('completed'),
+      );
+      assert.ok(fact);
+      return {
+        scope: 'match',
+        composition: { mode: 'player-pick', playerId: 'home-7', factIds: [fact.id] },
+        followUp: '',
+      };
+    },
+    (packet) => ({
+      decision: 'approve',
+      requestCheck: {
+        status: 'answered',
+        requestedInformation: question.question,
+        responseIntent: {
+          purpose: 'assessment',
+          needsAssessment: true,
+          needsExplicitCorrection: false,
+          needsScoreline: false,
+          needsMeasurementLimitation: false,
+          reason: 'The supporting reason is an observed contribution for a provisional pick.',
+        },
+        coverage: packet.requestComponents.map((requestSpan) => ({
+          requestSpan,
+          claimIndices: [0, 1],
+          answerForm: 'assessment',
+          requestedAction: 'other',
+          explanationTarget: 'other',
+        })),
+      },
+    }),
+  ]);
+  const result = await answerMatchQuestionAI(question, { config, fetcher: mock.fetcher });
+  assert.equal(result.execution.modelCalls, 3);
+  assert.equal(result.execution.repairs, 0);
+  assert.equal(result.claims.length, 2);
+  assert.equal(result.aiSelectedJudgment.playerId, 'home-7');
+  assert.match(result.answer, /my pick so far is J\. Cole/i);
+  assert.match(result.answer, /completed/);
+  assert.doesNotMatch(result.answer, /significant|leading|intention|wanted|forced/i);
+});
+
+for (const questionText of [
+  'Who is standing out, and why did Reed choose to shoot?',
+  'Who has been best, and could Reed have passed instead?',
+])
+  test(`a qualitative pick cannot normalize away a separate motive or alternative: ${questionText}`, async () => {
+    const question = {
+      kind: 'sustained',
+      seed: 17,
+      time: 80,
+      language: 'en',
+      question: questionText,
+    };
+    const mock = sequenceTransport([
+      {
+        answerFocus: 'player-assessment',
+        explanationTarget: 'decision-rationale',
+        requestedForm: 'explanation',
+        mentionedPlayers: ['A. Reed'],
+        decision: {
+          kind: 'queries',
+          queries: [
+            {
+              filters: { type: 'shot', player: 'A. Reed' },
+              aggregate: 'list',
+              order: 'desc',
+              limit: 1,
+            },
+          ],
+        },
+      },
+      (packet) => {
+        assert.equal(packet.requestedForm, 'explanation');
+        assert.equal(packet.explanationTarget, 'decision-rationale');
+        const shot = packet.matchFacts.facts.find(
+          (f) => f.selection.kind === 'event' && f.selection.eventType === 'shot',
+        );
+        assert.ok(shot);
+        return {
+          scope: 'match',
+          composition: {
+            mode: 'explanation',
+            factIds: [shot.id],
+            claim: {
+              text: 'He intended to avoid pressure.',
+              kind: 'interpretation',
+              evidence: [],
+              dependsOn: [0],
+            },
+          },
+          followUp: '',
+        };
+      },
+    ]);
+    await assert.rejects(
+      answerMatchQuestionAI(question, { config, fetcher: mock.fetcher }),
+      (error) =>
+        error.code === 'question-invalid-fact-selection' &&
+        /unrecorded player rationale/.test(error.message),
+    );
+    assert.equal(mock.count(), 2);
+  });
+
+test('player-pick schema binds every player to own positive facts and preserves that boundary after a rejected mismatched pick', async () => {
+  const question = {
+    kind: 'sustained',
+    seed: 17,
+    time: 80,
+    language: 'en',
+    question: 'Who’s standing out so far, and why?',
+  };
+  let wrongShotId, ownContribution;
+  const assertBound = (packet, body) => {
+    const evidence = packet.evidence || packet;
+    const modes = resolvedWireSchema(body).properties.composition.anyOf;
+    assert.ok(modes.length > 1, 'Offer actual eligible players, not a predetermined answer');
+    assert.ok(modes.every((mode) => mode.properties.mode.enum[0] === 'player-pick'));
+    const facts = evidence.matchFacts.facts;
+    for (const mode of modes) {
+      const [playerId] = mode.properties.playerId.enum;
+      assert.equal(mode.properties.playerId.enum.length, 1);
+      for (const factId of mode.properties.factIds.items.enum) {
+        const fact = facts.find((f) => f.id === factId);
+        assert.ok(fact);
+        const owner =
+          fact.selection.kind === 'credited-goal-assist'
+            ? fact.selection.assisterId
+            : fact.selection.subjectId || fact.selection.playerId;
+        assert.equal(
+          owner,
+          playerId,
+          'Every schema-permitted contribution must belong to the chosen player',
+        );
+      }
+      assert.equal(mode.properties.factIds.minItems, 1);
+      assert.equal(mode.properties.factIds.maxItems, 1);
+    }
+    return evidence;
+  };
+  const mock = sequenceTransport([
+    {
+      answerFocus: 'player-assessment',
+      explanationTarget: 'decision-rationale',
+      requestedForm: 'explanation',
+      mentionedPlayers: [],
+      decision: {
+        kind: 'queries',
+        queries: [
+          { filters: {}, aggregate: 'list', order: 'asc', limit: 20, timeFrom: 0, timeTo: 80 },
+        ],
+      },
+    },
+    (packet, body) => {
+      const evidence = assertBound(packet, body);
+      wrongShotId = evidence.matchFacts.facts.find(
+        (f) =>
+          f.selection.kind === 'count' &&
+          f.selection.subjectId === 'home-10' &&
+          f.selection.metric === 'attempts',
+      ).id;
+      const cole = resolvedWireSchema(body).properties.composition.anyOf.find((mode) =>
+        mode.properties.playerId.enum.includes('home-7'),
+      );
+      assert.ok(!cole.properties.factIds.items.enum.includes(wrongShotId));
+      return {
+        scope: 'match',
+        composition: { mode: 'player-pick', playerId: 'home-7', factIds: [wrongShotId] },
+        followUp: '',
+      };
+    },
+    (packet, body) => {
+      assert.match(packet.feedback.reason, /own contribution/);
+      const evidence = assertBound(packet, body);
+      ownContribution = evidence.matchFacts.facts.find(
+        (f) =>
+          f.selection.kind === 'count' &&
+          f.selection.subjectId === 'home-7' &&
+          f.selection.metric === 'ballWins',
+      ).id;
+      return {
+        scope: 'match',
+        composition: { mode: 'player-pick', playerId: 'home-7', factIds: [ownContribution] },
+        followUp: '',
+      };
+    },
+    (packet) => ({
+      decision: 'approve',
+      requestCheck: {
+        status: 'answered',
+        requestedInformation: question.question,
+        responseIntent: {
+          purpose: 'assessment',
+          needsAssessment: true,
+          needsExplicitCorrection: false,
+          needsScoreline: false,
+          needsMeasurementLimitation: false,
+          reason: 'A provisional pick supported by that player’s own recorded contribution.',
+        },
+        coverage: packet.requestComponents.map((requestSpan) => ({
+          requestSpan,
+          claimIndices: [0, 1],
+          answerForm: 'assessment',
+          requestedAction: 'other',
+          explanationTarget: 'other',
+        })),
+      },
+    }),
+  ]);
+  const result = await answerMatchQuestionAI(question, {
+    config,
+    fetcher: mock.fetcher,
+    canRepair: () => true,
+  });
+  assert.equal(result.execution.modelCalls, 4);
+  assert.equal(result.execution.repairs, 1);
+  assert.equal(result.aiSelectedJudgment.playerId, 'home-7');
+  assert.equal(result.canonicalFactSelection.proofs[0].factId, ownContribution);
+  assert.match(result.answer, /ball wins/);
+  assert.match(result.answer, /my pick so far/i);
+  assert.doesNotMatch(result.answer, /possession|influence|Reed|leading|significant/i);
+});
+
+for (const [answerFocus, explanationTarget] of [
+  ['player-performance', 'statistic-definition'],
+  ['event-actor', 'none'],
+  ['player-performance', 'observed-sequence'],
+])
+  test(`ranking plus shot outcomes keeps Azure-valid reference enums and complete current facts (${answerFocus})`, async () => {
+    const question = {
+      kind: 'sustained',
+      seed: 17,
+      time: 80,
+      language: 'en',
+      question: 'Who’s had the most shots so far, and how did they turn out?',
+    };
+
+    const mock = sequenceTransport(
+      [
+        {
+          answerFocus,
+          explanationTarget,
+          requestedForm: 'fact',
+          mentionedPlayers: [],
+          decision: {
+            kind: 'queries',
+            queries: [
+              {
+                filters: { type: 'shot' },
+                aggregate: 'by-player',
+                order: 'desc',
+                limit: 1,
+                timeFrom: 0,
+                timeTo: 80,
+              },
+            ],
+          },
+        },
+        (packet, body) => {
+          assert.equal(
+            packet.explanationTarget,
+            explanationTarget === 'statistic-definition' ? 'none' : explanationTarget,
+          );
+          assert.equal(packet.requestedForm, 'fact');
+          const rank = packet.matchFacts.facts.find(
+            (f) => f.selection.kind === 'player-count-ranking' && f.selection.metric === 'attempts',
+          );
+          assert.ok(
+            rank,
+            'Canonical executed count-desc order must recover the complete tied-leader proof even when nullable planner groupOrder was absent',
+          );
+          const shots = packet.matchFacts.facts.filter(
+            (f) =>
+              f.selection.kind === 'event' &&
+              f.selection.eventType === 'shot' &&
+              f.selection.playerId === 'home-10' &&
+              !f.selection.attributes,
+          );
+          assert.equal(shots.length, 2);
+          const modes = resolvedWireSchema(body).properties.composition.anyOf;
+          assert.equal(modes.length, 1);
+          assert.deepEqual(modes[0].properties.mode.enum, ['facts']);
+          assert.equal(modes[0].properties.factIds.minItems, 3);
+          assert.equal(modes[0].properties.factIds.maxItems, 3);
+          assert.deepEqual(
+            [...modes[0].properties.factIds.items.enum].sort(),
+            [rank.id, ...shots.map((f) => f.id)].sort(),
+          );
+          assert.ok(
+            modes.some((mode) =>
+              [rank.id, ...shots.map((fact) => fact.id)].every((id) =>
+                mode.properties.factIds?.items.enum?.includes(id),
+              ),
+            ),
+            'Resolving the required-ranking enum must retain allowed outcome facts for the other component',
+          );
+          return {
+            scope: 'match',
+            composition: { mode: 'facts', factIds: [rank.id, ...shots.map((f) => f.id)] },
+            followUp: '',
+          };
+        },
+        (packet) => ({
+          decision: 'approve',
+          reason: 'Complete canonical ranking and current outcomes.',
+          checks: packet.answer.claims.map((claim, claimIndex) => ({
+            claimIndex,
+            supported: true,
+            reason: 'Exact canonical facts are supported.',
+            actors: [],
+            counts: [],
+            inventedFacts: [],
+            shotOutcomeAssertions: claim.text.includes('blocked') ? ['blocker-identity'] : [],
+          })),
+          requestCheck: {
+            status: 'answered',
+            requestedInformation: question.question,
+            responseIntent: {
+              purpose: 'fact-retrieval',
+              needsAssessment: false,
+              needsExplicitCorrection: false,
+              needsScoreline: false,
+              needsMeasurementLimitation: false,
+              reason:
+                'A complete ranking and the ranked player’s received shot outcomes answer both factual parts.',
+            },
+            coverage: packet.requestComponents.map((requestSpan, i) => ({
+              requestSpan,
+              claimIndices: i ? [1, 2] : [0],
+              answerForm: 'fact',
+              requestedAction: 'shot',
+              explanationTarget: 'none',
+              requestedQuantity: i
+                ? [
+                    {
+                      requestSpan,
+                      action: 'shot',
+                      state: 'any',
+                      grouping: 'by-player',
+                      subjectIds: ['home-10'],
+                      timeFrom: 0,
+                      timeTo: 80,
+                      timeFromExclusive: null,
+                      timeToExclusive: null,
+                      qualifiers: null,
+                    },
+                  ]
+                : null,
+            })),
+          },
+        }),
+      ],
+      (packet, call, body) => {
+        const checkRefs = (node, path = '$') => {
+          if (!node || typeof node !== 'object') return;
+          if (Number.isInteger(node.minItems) && Number.isInteger(node.maxItems))
+            assert.ok(node.minItems <= node.maxItems, `Invalid array bounds at ${path}`);
+          if (Object.hasOwn(node, '$ref'))
+            assert.ok(!Object.hasOwn(node, 'enum'), `Azure rejects $ref plus enum at ${path}`);
+          for (const [key, value] of Object.entries(node)) checkRefs(value, path + '.' + key);
+        };
+        checkRefs(body.response_format.json_schema.schema);
+        if (call === 2) {
+          const schema = resolvedWireSchema(body);
+          const variants = schema.properties.checks.items.anyOf;
+          for (const variant of variants.filter((v) => v.properties.claimIndex.enum[0] > 0))
+            assert.equal(variant.properties.shotOutcomeAssertions.maxItems, 0);
+          const coverage = schema.properties.requestCheck.properties.coverage.items.anyOf;
+          const outcome = coverage.find(
+            (v) => v.properties.requestSpan.enum[0] === 'how did they turn out',
+          );
+          assert.ok(outcome);
+          assert.equal(outcome.properties.requestedQuantity.type, 'null');
+        }
+        if (!call)
+          assert.ok(
+            !resolvedWireSchema(body).properties.explanationTarget.enum.includes(
+              'statistic-definition',
+            ),
+          );
+      },
+    );
+    const result = await answerMatchQuestionAI(question, { config, fetcher: mock.fetcher });
+    assert.equal(result.execution.modelCalls, 3);
+    assert.equal(result.execution.planningRepairs, 0);
+    assert.equal(result.execution.repairs, 0);
+    assert.equal(result.canonicalFactSelection.proofs[0].kind, 'player-count-ranking');
+    assert.equal(result.claims.length, 3);
+    assert.match(result.answer, /A\. Reed/);
+    assert.match(result.answer, /off.target/i);
+    assert.match(result.answer, /blocked/i);
+    assert.doesNotMatch(result.answer, /definition|intention|wanted|chance quality/i);
+  });
+
+for (const language of ['fr', 'en'])
+  test(`complete named endpoint story remains one canonical claim through semantic repair (${language})`, async () => {
+    const question = {
+      kind: 'sustained',
+      seed: 17,
+      time: 80,
+      language,
+      question:
+        language === 'fr'
+          ? 'Comment l’action s’est-elle construite avant le tir de Reed à 01:14 ?'
+          : "How did the action develop before Reed's shot at 01:14?",
+    };
+    const plan = {
+      answerFocus: 'event-sequence',
+      requestedForm: 'explanation',
+      explanationTarget: 'observed-sequence',
+      mentionedPlayers: ['A. Reed'],
+      decision: {
+        kind: 'queries',
+        queries: [
+          {
+            filters: {},
+            aggregate: 'list',
+            order: 'asc',
+            limit: 20,
+            timeFrom: 0,
+            timeTo: 74,
+            timeToExclusive: true,
+          },
+        ],
+      },
+    };
+    let storyId;
+    const choose = (packet, body) => {
+      const evidence = packet.evidence || packet;
+      const story = evidence.matchFacts.facts.find(
+        (f) => f.selection.kind === 'linked-shot-supply' && f.selection.time === 74,
+      );
+      assert.ok(story);
+      storyId ||= story.id;
+      assert.equal(story.id, storyId);
+      const modes = resolvedWireSchema(body).properties.composition.anyOf;
+      assert.equal(modes.length, 1);
+      assert.deepEqual(modes[0].properties.mode.enum, ['facts']);
+      assert.deepEqual(modes[0].properties.factIds.items.enum, [storyId]);
+      assert.equal(modes[0].properties.factIds.maxItems, 1);
+      assert.equal(modes[0].properties.factIds.minItems, 1);
+      return { scope: 'match', composition: { mode: 'facts', factIds: [storyId] }, followUp: '' };
+    };
+    const approve = (packet) => ({
+      decision: 'approve',
+      requestCheck: {
+        status: 'answered',
+        requestedInformation: question.question,
+        coverage: packet.requestComponents.map((requestSpan) => ({
+          requestSpan,
+          claimIndices: [0],
+          answerForm: 'explanation',
+          requestedAction: 'other',
+          explanationTarget: 'observed-sequence',
+          temporalRelation: 'before-requested-event',
+          relationAnchorClaimIndex: 0,
+          relationEntityBinding: 'same-team',
+          relationSourceLinkIndex: null,
+        })),
+      },
+    });
+    const mock = sequenceTransport([
+      plan,
+      choose,
+      (packet) => ({
+        ...approve(packet),
+        decision: 'withhold',
+        reason: 'Forced semantic review rejection for repair-boundary regression.',
+      }),
+      choose,
+      approve,
+    ]);
+    const result = await answerMatchQuestionAI(question, {
+      config,
+      fetcher: mock.fetcher,
+      canRepair: () => true,
+    });
+    assert.equal(result.execution.modelCalls, 5);
+    assert.equal(result.execution.repairs, 1);
+    assert.equal(result.claims.length, 1);
+    assert.equal(result.claims[0].kind, 'observation');
+    assert.equal(result.claims[0].evidence.length, 4);
+    assert.equal(result.canonicalFactSelection.selectedFactIds.length, 1);
+    assert.doesNotMatch(result.answer, /short|standard|courte|00:10|00:14/);
+    const invalid = sequenceTransport([
+      plan,
+      choose,
+      (packet) => ({ ...approve(packet), decision: 'withhold', reason: 'Force repair.' }),
+      (packet, body) => {
+        choose(packet, body);
+        return {
+          scope: 'match',
+          composition: {
+            mode: 'explanation',
+            factIds: [storyId],
+            claim: {
+              kind: 'interpretation',
+              text: 'A repeated account of the same action.',
+              evidence: [],
+              dependsOn: [0],
+            },
+          },
+          followUp: '',
+        };
+      },
+    ]);
+    await assert.rejects(
+      answerMatchQuestionAI(question, { config, fetcher: invalid.fetcher, canRepair: () => true }),
+      (error) =>
+        error.code === 'question-invalid-fact-selection' &&
+        /single current canonical story/.test(error.message),
+    );
+    assert.equal(invalid.count(), 4);
+  });
+
+test('a closed endpoint story cannot erase requested event fields, source attributes, measurement or intent', () => {
+  const base = { question: "How did the action develop before Reed's shot at 01:14?" };
+  assert.equal(endpointStoryExtraRequirements(base), false);
+  for (const question of [
+    "Describe the pass technique before Reed's shot at 01:14",
+    'Explique la construction avec le pied utilisé avant le tir à 01:14',
+    'Describe el tipo de pase antes del tiro a 01:14',
+    'Descreva a técnica do passe antes do remate aos 01:14',
+    'Why did Reed choose the shot at 01:14?',
+  ])
+    assert.equal(endpointStoryExtraRequirements({ question }), true, question);
+  assert.equal(
+    endpointStoryExtraRequirements({
+      ...base,
+      requestedSourceAttributes: [{ source: 'roster', sourceField: 'number' }],
+    }),
+    true,
+  );
+  assert.equal(
+    endpointStoryExtraRequirements({
+      ...base,
+      requiredResponseForms: [{ answerForm: 'unavailable-measurement' }],
+    }),
+    true,
+  );
+  assert.equal(
+    endpointStoryExtraRequirements({
+      ...base,
+      requestedEvidence: [{ query: { filters: { bodyPart: 'left-foot' } } }],
+    }),
+    true,
+  );
+});
+
+for (const extra of ['event-field', 'roster-field', 'multipart'])
+  test(`endpoint story schema preserves separate ${extra} requirements`, async () => {
+    const question = {
+      kind: 'sustained',
+      seed: 17,
+      time: 80,
+      language: 'en',
+      question:
+        extra === 'event-field'
+          ? "Describe the buildup with its pass technique before Reed's shot at 01:14?"
+          : extra === 'roster-field'
+            ? "Describe the buildup with Cole's shirt number before Reed's shot at 01:14?"
+            : "How did the action develop before Reed's shot at 01:14, and how many passes has Cole completed?",
+    };
+    const spans = requestComponents(question.question);
+    const attrs =
+      extra === 'roster-field'
+        ? [
+            {
+              requestSpan: spans[0],
+              source: 'roster',
+              sourceField: 'number',
+              actorRole: 'none',
+              linkage: 'none',
+            },
+          ]
+        : null;
+    const plan = {
+      answerFocus: 'event-sequence',
+      requestedForm: 'explanation',
+      explanationTarget: 'observed-sequence',
+      requestedSourceAttributes: attrs,
+      mentionedPlayers: ['A. Reed', 'J. Cole'],
+      decision: {
+        kind: 'queries',
+        queries: [
+          {
+            filters: {},
+            aggregate: 'list',
+            order: 'asc',
+            limit: 20,
+            timeFrom: 0,
+            timeTo: 74,
+            timeToExclusive: true,
+          },
+        ],
+      },
+    };
+    let observed;
+    const mock = sequenceTransport([
+      plan,
+      (packet, body) => {
+        observed = { packet, schema: resolvedWireSchema(body) };
+        return { scope: 'match', composition: { mode: 'facts', factIds: [] }, followUp: '' };
+      },
+    ]);
+    await assert.rejects(
+      answerMatchQuestionAI(question, { config, fetcher: mock.fetcher, canRepair: () => false }),
+    );
+    assert.ok(observed);
+    assert.equal(mock.count(), 2);
+    const modes = observed.schema.properties.composition.anyOf;
+    assert.ok(
+      modes.length > 1 ||
+        modes[0].properties.mode.enum[0] !== 'facts' ||
+        modes[0].properties.factIds.maxItems !== 1,
+      'A complete sequence alone cannot close a separate requested obligation',
+    );
+    if (attrs) assert.deepEqual(observed.packet.requestedSourceAttributes, attrs);
+    if (extra === 'multipart') assert.equal(observed.packet.requestComponents.length, 2);
+  });
+
+test('ranked outcome repair cannot replace a missing attempt with the actual unrelated supply fact', async () => {
+  const input = {
+    kind: 'sustained',
+    seed: 17,
+    time: 80,
+    language: 'en',
+    question: 'Who’s had the most shots so far, and how did they turn out?',
+  };
+  const plan = {
+    requestedForm: 'fact',
+    explanationTarget: 'observed-sequence',
+    answerFocus: 'player-performance',
+    mentionedPlayers: [],
+    decision: {
+      kind: 'queries',
+      queries: [
+        {
+          filters: { type: 'shot' },
+          aggregate: 'by-player',
+          order: 'desc',
+          limit: 1,
+          timeFrom: 0,
+          timeTo: 80,
+        },
+      ],
+    },
+  };
+  let required;
+  const choose = (packet, body, bad) => {
+    const facts = (packet.evidence || packet).matchFacts.facts,
+      rank = facts.find(
+        (f) => f.selection.kind === 'player-count-ranking' && f.selection.metric === 'attempts',
+      ),
+      shots = facts.filter(
+        (f) =>
+          f.selection.kind === 'event' &&
+          f.selection.eventType === 'shot' &&
+          f.selection.playerId === 'home-10' &&
+          !f.selection.attributes,
+      ),
+      supply = facts.find(
+        (f) => f.selection.kind === 'linked-shot-supply' && f.selection.time === 74,
+      );
+    assert.equal(
+      supply,
+      undefined,
+      'Closed writer catalog removes the source supply fact that replaced the missing attempt in the real V7 response',
+    );
+    assert.equal(shots.length, 2);
+    required = [rank.id, ...shots.map((f) => f.id)];
+    const modes = resolvedWireSchema(body).properties.composition.anyOf;
+    assert.equal(modes.length, 1);
+    assert.deepEqual([...modes[0].properties.factIds.items.enum].sort(), [...required].sort());
+    assert.ok(!modes[0].properties.factIds.items.enum.includes('fact-b38e4cc0283e81e3'));
+    assert.equal(modes[0].properties.factIds.maxItems, 3);
+    if (!bad) assert.match(packet.feedback.reason, /every distinct current attempt/);
+    return {
+      scope: 'match',
+      composition: {
+        mode: 'facts',
+        factIds: bad
+          ? [
+              rank.id,
+              'fact-b27133598daf9ac4',
+              shots.find((f) => f.selection.time === 74).id,
+              'fact-b38e4cc0283e81e3',
+            ]
+          : required,
+      },
+      followUp: '',
+    };
+  };
+  const mock = sequenceTransport([
+    plan,
+    (p, b) => choose(p, b, true),
+    (p, b) => choose(p, b, false),
+    (packet) => ({
+      decision: 'approve',
+      requestCheck: {
+        status: 'answered',
+        requestedInformation: input.question,
+        coverage: packet.requestComponents.map((requestSpan, i) => ({
+          requestSpan,
+          claimIndices: i ? [1, 2] : [0],
+          answerForm: 'fact',
+          requestedAction: 'shot',
+          explanationTarget: 'none',
+        })),
+      },
+    }),
+  ]);
+  const result = await answerMatchQuestionAI(input, {
+    config,
+    fetcher: mock.fetcher,
+    canRepair: () => true,
+  });
+  assert.equal(result.execution.modelCalls, 4);
+  assert.equal(result.execution.repairs, 1);
+  assert.equal(result.claims.length, 3);
+  assert.deepEqual([...result.canonicalFactSelection.selectedFactIds].sort(), [...required].sort());
+  assert.match(result.answer, /off.target/i);
+  assert.match(result.answer, /blocked/i);
+  assert.doesNotMatch(result.answer, /assist|supplied|Cole/i);
+});
+
+test('ranked outcome schema retains a separate explicitly requested completed-pass total', async () => {
+  const input = {
+    kind: 'sustained',
+    seed: 17,
+    time: 80,
+    language: 'en',
+    question:
+      'Who has the most shots and how did they turn out and how many completed passes have both teams made?',
+  };
+  const plan = {
+    requestedForm: 'fact',
+    explanationTarget: 'none',
+    answerFocus: 'event-actor',
+    mentionedPlayers: [],
+    decision: {
+      kind: 'queries',
+      queries: [
+        {
+          filters: { type: 'shot' },
+          aggregate: 'by-player',
+          order: 'desc',
+          limit: 1,
+          timeFrom: 0,
+          timeTo: 80,
+        },
+        { filters: { type: 'pass', result: true }, aggregate: 'count', timeFrom: 0, timeTo: 80 },
+      ],
+    },
+  };
+  const mock = sequenceTransport([
+    plan,
+    (packet, body) => {
+      const facts = packet.matchFacts.facts,
+        rank = facts.find(
+          (f) => f.selection.kind === 'player-count-ranking' && f.selection.metric === 'attempts',
+        ),
+        shots = facts.filter(
+          (f) =>
+            f.selection.kind === 'event' &&
+            f.selection.eventType === 'shot' &&
+            f.selection.playerId === 'home-10' &&
+            !f.selection.attributes,
+        ),
+        passes = facts.find(
+          (f) =>
+            f.selection.kind === 'count' &&
+            f.selection.metric === 'completedPasses' &&
+            f.selection.subjectId === null &&
+            f.selection.timeFrom === 0 &&
+            f.selection.timeTo === 80,
+        );
+      assert.ok(passes);
+      assert.ok(rank);
+      assert.equal(shots.length, 2);
+      const selected = [rank.id, ...shots.map((f) => f.id), passes.id];
+      assert.equal(selected.length, 4);
+      const modes = resolvedWireSchema(body).properties.composition.anyOf;
+      assert.ok(
+        modes.some(
+          (m) =>
+            m.properties.factIds.maxItems >= 4 &&
+            selected.every((id) => m.properties.factIds.items.enum.includes(id)),
+        ),
+      );
+      return { scope: 'match', composition: { mode: 'facts', factIds: selected }, followUp: '' };
+    },
+    (packet) => ({
+      decision: 'approve',
+      requestCheck: {
+        status: 'answered',
+        requestedInformation: input.question,
+        coverage: packet.requestComponents.map((requestSpan, i) => ({
+          requestSpan,
+          claimIndices: i === 0 ? [0] : i === 1 ? [1, 2] : [3],
+          answerForm: 'fact',
+          requestedAction: i === 2 ? 'pass' : 'shot',
+          explanationTarget: 'none',
+          requestedQuantity:
+            i === 2
+              ? [
+                  {
+                    requestSpan,
+                    action: 'pass',
+                    state: 'completed',
+                    grouping: 'combined',
+                    subjectIds: [],
+                    timeFrom: 0,
+                    timeTo: 80,
+                    timeFromExclusive: null,
+                    timeToExclusive: null,
+                    qualifiers: null,
+                  },
+                ]
+              : null,
+        })),
+      },
+    }),
+  ]);
+  const result = await answerMatchQuestionAI(input, { config, fetcher: mock.fetcher }).catch((e) =>
+    assert.fail(
+      JSON.stringify({ code: e.code, message: e.message, issues: e.feedback?.requestAdequacy }),
+    ),
+  );
+  assert.equal(result.execution.modelCalls, 3);
+  assert.equal(result.claims.length, 4);
+  assert.ok(
+    result.canonicalFactSelection.proofs.some(
+      (p) => p.kind === 'count' && p.metric === 'completedPasses' && p.subjectId === null,
+    ),
+  );
+});
+
+test('embedded outcome attributes keep the open schema instead of an outcome-only answer', async () => {
+  const input = {
+    kind: 'sustained',
+    seed: 17,
+    time: 80,
+    language: 'en',
+    question: 'Who has the most shots and how did they turn out including the body part used?',
+  };
+  const plan = {
+    requestedForm: 'fact',
+    explanationTarget: 'none',
+    answerFocus: 'event-actor',
+    mentionedPlayers: [],
+    decision: {
+      kind: 'queries',
+      queries: [
+        {
+          filters: { type: 'shot' },
+          aggregate: 'by-player',
+          order: 'desc',
+          limit: 1,
+          timeFrom: 0,
+          timeTo: 80,
+        },
+      ],
+    },
+  };
+  let captured;
+  const mock = sequenceTransport([
+    plan,
+    (packet, body) => {
+      captured = { packet, schema: resolvedWireSchema(body) };
+      return { scope: 'match', composition: { mode: 'facts', factIds: [] }, followUp: '' };
+    },
+  ]);
+  await assert.rejects(
+    answerMatchQuestionAI(input, { config, fetcher: mock.fetcher, canRepair: () => false }),
+  );
+  assert.ok(captured);
+  assert.equal(captured.packet.requestComponents.length, 2);
+  assert.ok(
+    captured.schema.properties.composition.anyOf.some(
+      (mode) =>
+        mode.properties.factIds?.maxItems > 3 || mode.properties.factIds?.items.enum?.length > 3,
+    ),
+  );
 });

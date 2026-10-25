@@ -89,6 +89,16 @@ import { directQuestionFacts } from './direct-question-facts.js';
 import { recoveryClassification } from './recovery-classification.js';
 import { pruneUncoveredCanonicalFacts } from './question-coverage-pruning.js';
 import { sourceSequenceLinks, sourceSequenceWitness } from './source-sequence-proof.js';
+import { canonicalObservedSequenceWitness } from './canonical-observed-sequence.js';
+import { emitQuestionDiagnostic } from './question-diagnostics.js';
+import { playerPickBasisRequest } from './player-pick-request.js';
+import { statisticDefinitionRequestScope } from './statistic-definition-request.js';
+import {
+  canonicalShotOutcome,
+  descriptiveOutcomeRequest,
+  rankedOutcomeInventory,
+  rankedOutcomeCompositionFacts,
+} from './canonical-outcome-review.js';
 import { omitLeadingCountProse } from './question-prose-normalization.js';
 import {
   sourceClubSide,
@@ -1225,6 +1235,7 @@ export function requestedQuantityIssues(part, answer, packet, selection, operati
           );
         });
     }
+    if (!covered && rankedOutcomeInventory(part, answer, selection, packet, demand)) covered = true;
     if (!covered)
       issues.push({
         requestSpan: part.requestSpan,
@@ -1736,6 +1747,7 @@ export function reviewRequestAdequacy(
       });
       continue;
     }
+    if (canonicalShotOutcome(check.claimIndex, answer, canonicalFactSelection, packet)) continue;
     for (const attribute of check.shotOutcomeAssertions || []) {
       if (['blocker-identity', 'pre-keeper-path', 'physical-keeper-workload'].includes(attribute))
         issues.push({
@@ -1965,6 +1977,18 @@ export function reviewRequestAdequacy(
     issues.push(
       ...requestedQuantityIssues(part, answer, packet, canonicalFactSelection, operationProofs),
     );
+    if (
+      descriptiveOutcomeRequest(part.requestSpan) &&
+      canonicalFactSelection?.proofs?.some(
+        (proof) => proof.kind === 'player-count-ranking' && proof.metric === 'attempts',
+      ) &&
+      !rankedOutcomeInventory(part, answer, canonicalFactSelection, packet)
+    )
+      issues.push({
+        requestSpan: part.requestSpan,
+        reason:
+          'The ranked player outcome list needs every distinct current attempt from the complete ranking source, with the same actors, window and filters; a count alone cannot replace missing outcomes.',
+      });
     if (pureRatioRequestComponent(part.requestSpan)) {
       const ratioIndex = (index) =>
         (canonicalFactSelection?.proofs?.[index]?.kind === 'pass-completion-profile' &&
@@ -2253,8 +2277,24 @@ export function reviewRequestAdequacy(
               (binding.resultEvents || []).some((ref) => selectedRefs.has(identity(ref))))
           );
         });
+      const namedEndpoint = explicitNamedShotAnchor(
+        { question: packet.question, time: packet.observedAt },
+        packet.roster || [],
+        [...(packet.queryResults || []), ...(packet.requestedEvidence || [])]
+          .flatMap((source) => source.rows || [])
+          .concat(packet.linkedContext?.rows || []),
+      );
       if (
         !executed &&
+        !canonicalObservedSequenceWitness(
+          part,
+          answer,
+          canonicalFactSelection,
+          packet,
+          namedEndpoint
+            ? { type: 'event', id: namedEndpoint.id, revision: namedEndpoint.revision }
+            : null,
+        ) &&
         !canonicalGoalSequenceWitness(
           part,
           answer,
@@ -2853,7 +2893,7 @@ const firstAnswerSchema = strictObject({
     type: 'string',
     enum: ['fact', 'assessment', 'explanation'],
     description:
-      'Classify what the fan wants before planning data: fact is an identity/count/outcome lookup, including what happened to an attempt, who acted next, and how many actions occurred before an event. Several such lookups remain fact form; a chronological lookup is not by itself a buildup explanation. assessment is a comparative or evaluative judgment; explanation asks how/why a move developed or for a football concept. A conversational comparative judgment needs assessment even when phrased as who/yes/no. Workload, involvement and how busy a goalkeeper has been request an assessment, not just a save count.',
+      'Choose the form before evidence: fact asks identity, count or outcome, including next/before chronology; several factual parts remain fact, not a buildup explanation. assessment asks for an evaluative/comparative judgment, including who/yes-no, player picks with supporting reasons, workload, involvement or keeper activity. A pick’s reason is its recorded contribution: use explanationTarget other. explanation asks how a move developed or a football concept; actual action motives/alternatives use decision-rationale and a specific uncertainty.',
   },
   mentionedPlayers: {
     type: 'array',
@@ -3413,6 +3453,26 @@ export function sourceScopedSequenceFacts(manifest, requestedEvidence = []) {
       }),
   );
 }
+export function endpointStoryExtraRequirements(packet) {
+  if (packet.requestedSourceAttributes?.length || packet.requiredResponseForms?.length) return true;
+  if (
+    (packet.requestedEvidence || []).some((source) =>
+      ['bodyPart', 'passType', 'technique', 'recoveryKind', 'linkedShotOutcome'].some(
+        (field) => source.query?.filters?.[field] != null,
+      ),
+    )
+  )
+    return true;
+  const text = String(packet.question || '')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase();
+  // A complete chronological story does not supply a separately requested
+  // technique, physical attribute, measurement, intention or alternative.
+  return /\b(?:foot|feet|body|technique|type|style|distance|length|speed|pace|number|height|age|nationality|position|why|reason|choose|chose|instead|alternative|pied|pieds|corps|genre|vitesse|longueur|numero|taille|nationalite|pourquoi|choisi|plutot|cuerpo|tecnica|tipo|estilo|distancia|longitud|velocidad|dorsal|altura|nacionalidad|porque|alternativa|pe|pes|corpo|comprimento|velocidade|camisola|nacionalidade|escolheu)\b/u.test(
+    text,
+  );
+}
 function compositionSchema(
   manifest,
   requestedForm,
@@ -3569,7 +3629,7 @@ function compositionSchema(
               ].includes(fact.proof.metric)))),
     );
     if (
-      !context.repair &&
+      (!context.repair || context.pickBasisOnly) &&
       requestedForm === 'assessment' &&
       answerFocus === 'player-assessment' &&
       !['observed-sequence', 'decision-rationale'].includes(explanationTarget) &&
@@ -3578,20 +3638,30 @@ function compositionSchema(
       supports.length &&
       context.roster?.length
     )
-      focusedModes = [
-        strictObject({
-          mode: { type: 'string', enum: ['player-pick'] },
-          playerId: { type: 'string', enum: context.roster.map((player) => player.id) },
-          factIds: {
-            type: 'array',
-            minItems: 1,
-            maxItems: 1,
-            items: { type: 'string', enum: supports.map((fact) => fact.id) },
-            description:
-              'Select the strongest relevant positive contribution by your provisional pick. Prefer a goal or explicit assist when decisive; do not select a team total or an unrelated player.',
-          },
-        }),
-      ];
+      focusedModes = context.roster.flatMap((player) => {
+        const own = supports.filter(
+          (fact) =>
+            (fact.proof.kind === 'credited-goal-assist'
+              ? fact.proof.assisterId
+              : fact.proof.subjectId || fact.proof.playerId) === player.id,
+        );
+        return own.length
+          ? [
+              strictObject({
+                mode: { type: 'string', enum: ['player-pick'] },
+                playerId: { type: 'string', enum: [player.id] },
+                factIds: {
+                  type: 'array',
+                  minItems: 1,
+                  maxItems: 1,
+                  items: { type: 'string', enum: own.map((fact) => fact.id) },
+                  description:
+                    'Select the strongest relevant positive contribution by your provisional pick. Prefer a goal or explicit assist when decisive; do not select a team total or an unrelated player.',
+                },
+              }),
+            ]
+          : [];
+      });
     const requestedScopes = new Set(
       (context.requestedEvidence || []).map((source) => JSON.stringify(source.scopeReference)),
     );
@@ -4098,16 +4168,19 @@ function compositionSchema(
       fact.proof.revision === context.requestedNamedShot?.revision,
   );
   if (
-    !context.repair &&
+    (!context.repair || context.closedEndpointStoryId) &&
     requestedForm === 'explanation' &&
     explanationTarget === 'observed-sequence' &&
     context.componentCount === 1 &&
+    !context.requestedSourceAttributes?.length &&
+    !context.endpointStoryExtraRequirements &&
     context.requestedNamedShot &&
     endpointStories.length === 1
   ) {
     // This single source-proved story already answers the bounded buildup.
     // Unrelated global facts and a repeated qualitative paragraph add no
-    // requested information. Repairs retain the independent review's scope.
+    // requested information. A complete endpoint-bound chain retains this
+    // shape through repair; independent relevance/support review still runs.
     schema.properties.composition.anyOf = [
       strictObject({
         mode: { type: 'string', enum: ['facts'] },
@@ -5346,6 +5419,7 @@ export async function answerMatchQuestionAI(
     canRepair = () => false,
     intentResolutionDepth = 0,
     maxModelCalls = maximumQuestionModelCalls,
+    onDiagnostic,
   } = {},
 ) {
   validateMatchQuestionInput(input);
@@ -5371,7 +5445,7 @@ export async function answerMatchQuestionAI(
           (turn) => turn.time <= clarified.originalObservedAt,
         ),
       },
-      { config, fetcher, signal, canRepair, intentResolutionDepth: 1, maxModelCalls },
+      { config, fetcher, signal, canRepair, intentResolutionDepth: 1, maxModelCalls, onDiagnostic },
     );
     const output = {
       ...result,
@@ -5388,7 +5462,15 @@ export async function answerMatchQuestionAI(
     if (repeatedReference.question) {
       const result = await answerMatchQuestionAI(
         { ...input, question: repeatedReference.question },
-        { config, fetcher, signal, canRepair, intentResolutionDepth: 1, maxModelCalls },
+        {
+          config,
+          fetcher,
+          signal,
+          canRepair,
+          intentResolutionDepth: 1,
+          maxModelCalls,
+          onDiagnostic,
+        },
       );
       const output = {
         ...result,
@@ -5590,18 +5672,22 @@ export async function answerMatchQuestionAI(
   let requiredMeasurementIds = [],
     requiredMixedCountIds = [],
     requiredRankingFactIds = [],
+    requiredRankedOutcomeIds = [],
+    rankedOutcomeOnly = false,
     requiredRecoveredComparisonIds = null,
     goalRepairFactIds = null,
     quantityRepairFactIds = null,
     quantityRepairAllowsAdditionalFacts = false,
     outcomeRepairFactIds = null,
+    closedEndpointStoryId = null,
     answerFocusNormalization = null;
   let modelCalls = 0,
     modelCallCeiling = Math.min(5, maxModelCalls),
     matchFactManifest = null,
     requestedForm = null,
     explanationTarget = null,
-    answerFocus = null;
+    answerFocus = null,
+    pickBasisOnly = false;
   const usage = { promptTokens: 0, completionTokens: 0 },
     stages = [];
   let first,
@@ -5793,7 +5879,12 @@ export async function answerMatchQuestionAI(
         schema.properties.explanationTarget.enum = schema.properties.explanationTarget.enum.filter(
           (value) => value !== 'decision-rationale',
         );
-      if (asksActualMatchOccurrence(input.question))
+      if (
+        asksActualMatchOccurrence(input.question) ||
+        ['match', 'mixed'].includes(
+          statisticDefinitionRequestScope(input.question, requestComponents(input.question)),
+        )
+      )
         schema.properties.explanationTarget.enum = schema.properties.explanationTarget.enum.filter(
           (value) => value !== 'statistic-definition',
         );
@@ -6071,6 +6162,22 @@ export async function answerMatchQuestionAI(
               'Bind every supplied numeric assertion exactly once using its index. Text and value are application-owned. Do not create counts for individual actions or omit an assertion.',
           };
           if (canonical.has(claimIndex)) {
+            if (
+              canonicalShotOutcome(
+                claimIndex,
+                request.answer,
+                request.canonicalFactSelection,
+                request.evidence,
+              )
+            )
+              variant.properties.shotOutcomeAssertions = {
+                type: 'array',
+                items: { type: 'string' },
+                minItems: 0,
+                maxItems: 0,
+                description:
+                  'Use [] for this exact source-proved event outcome. Its renderer states no blocker identity, pre-keeper path or physical workload; still assess relevance and coverage.',
+              };
             variant.properties.actors.maxItems = 0;
             variant.properties.counts.maxItems = 0;
             if (canonical.size === reviewedClaims.length) {
@@ -6485,6 +6592,24 @@ export async function answerMatchQuestionAI(
           ),
         };
       }
+      if (components.some(descriptiveOutcomeRequest)) {
+        const templates = coverage.items.anyOf || [coverage.items];
+        coverage.items = {
+          anyOf: templates.flatMap((template) =>
+            template.properties.requestSpan.enum.map((span) => {
+              const variant = structuredClone(template);
+              variant.properties.requestSpan.enum = [span];
+              if (descriptiveOutcomeRequest(span))
+                variant.properties.requestedQuantity = {
+                  type: 'null',
+                  description:
+                    'This component requests the described outcomes, not a new count. Cover every required current outcome; the application checks complete inventory against the source ranking.',
+                };
+              return variant;
+            }),
+          ),
+        };
+      }
       coverage.description =
         'One distinct entry for every exact server-supplied request component. Do not merge components or repeat one to replace another. Reference distinct zero-based indices of final answer claims that actually fulfill the component; [] means missing and requires withholding.';
       const clauses = request.ruleClauses || [];
@@ -6517,28 +6642,55 @@ export async function answerMatchQuestionAI(
     if (canonicalStage) {
       // Keep the fast rationale format for the first attempt. A reviewed failure
       // may require a premise correction or another missing answer component.
+      const compositionManifest = projectQuestionFactWindows(
+        projectActionLookupFacts(matchFactManifest, modelPacket),
+        modelPacket.requestedEvidence,
+      );
+      const requestedNamedShot = explicitNamedShotAnchor(input, roster, [...sourceById.values()]);
+      const completeEndpointStories = sourceScopedSequenceFacts(
+        compositionManifest,
+        modelPacket.requestedEvidence,
+      ).filter(
+        (fact) =>
+          fact.proof.eventId === requestedNamedShot?.id &&
+          fact.proof.revision === requestedNamedShot?.revision &&
+          fact.proof.modelGenerated === false &&
+          fact.proof.sequenceBasis === 'explicit-recovery-pass-reception-shot',
+      );
+      const extraStoryRequirements = endpointStoryExtraRequirements(modelPacket);
+      closedEndpointStoryId =
+        requestedForm === 'explanation' &&
+        explanationTarget === 'observed-sequence' &&
+        modelPacket.requestComponents?.length === 1 &&
+        !extraStoryRequirements &&
+        requestedNamedShot &&
+        completeEndpointStories.length === 1
+          ? completeEndpointStories[0].id
+          : null;
       schema = compositionSchema(
-        projectQuestionFactWindows(
-          projectActionLookupFacts(matchFactManifest, modelPacket),
-          modelPacket.requestedEvidence,
-        ),
+        compositionManifest,
         requestedForm,
         stage === 'repair' &&
           explanationTarget !== 'statistic-definition' &&
+          !closedEndpointStoryId &&
           !(explanationTarget === 'observed-sequence' && modelPacket.requestComponents?.length > 1)
           ? null
           : explanationTarget,
         answerFocus,
         {
           repair: stage === 'repair',
+          closedEndpointStoryId,
+          requestedSourceAttributes: modelPacket.requestedSourceAttributes,
+          endpointStoryExtraRequirements: extraStoryRequirements,
+          pickBasisOnly,
           operationCoverageRecovery: !!operationCoverageRecovery,
           recoveredOperationProofs: operationCoverageRecovery?.proofs || [],
           roster,
           explicitPlayerCount: modelPacket.namedPlayerActions?.length || 0,
-          componentCount: modelPacket.requestComponents?.length,
+          componentCount: pickBasisOnly ? 1 : modelPacket.requestComponents?.length,
           requestComponents: modelPacket.requestComponents,
           requestedEventReference: modelPacket.requestedMoment?.reference,
-          requestedNamedShot: explicitNamedShotAnchor(input, roster, [...sourceById.values()]),
+          requestedNamedShot,
           requestedEventPlayerId: sourceById.get(modelPacket.requestedMoment?.id)?.playerId,
           requestedEvidence: modelPacket.requestedEvidence,
           recordedActionLinks: sourceSequenceLinks(modelPacket),
@@ -6846,11 +6998,65 @@ export async function answerMatchQuestionAI(
         for (const mode of schema.properties.composition.anyOf) {
           const ids = mode.properties.factIds;
           ids.minItems = Math.max(ids.minItems || 0, requiredRankingFactIds.length);
+          // Azure does not allow enum beside $ref. Resolve the local canonical
+          // fact enum first, preserving other facts needed by multipart asks.
+          if (ids.items.$ref === '#/$defs/canonicalFactId')
+            ids.items = structuredClone(schema.$defs.canonicalFactId);
           ids.items.enum = [...new Set([...(ids.items.enum || []), ...requiredRankingFactIds])];
           ids.description =
             'Include every required complete ranking fact ' +
             requiredRankingFactIds.join(', ') +
             '. Preserve all joint leaders and their counts; additional facts or explanation may answer other components. A single player count cannot replace the ranking.';
+        }
+      }
+      requiredRankedOutcomeIds =
+        rankedOutcomeCompositionFacts(
+          projectQuestionFactWindows(
+            projectActionLookupFacts(matchFactManifest, modelPacket),
+            modelPacket.requestedEvidence,
+          ),
+          modelPacket,
+          requiredRankingFactIds,
+        ) || [];
+      rankedOutcomeOnly =
+        !!requiredRankedOutcomeIds.length &&
+        requestedForm === 'fact' &&
+        modelPacket.requestComponents?.length === 2 &&
+        !endpointStoryExtraRequirements(modelPacket);
+      if (requiredRankedOutcomeIds.length) {
+        if (rankedOutcomeOnly) {
+          schema.properties.composition.anyOf = [
+            strictObject({
+              mode: { type: 'string', enum: ['facts'] },
+              factIds: {
+                type: 'array',
+                minItems: requiredRankedOutcomeIds.length,
+                maxItems: requiredRankedOutcomeIds.length,
+                items: { type: 'string', enum: requiredRankedOutcomeIds },
+                description:
+                  'Select each required complete ranking and distinct current attempt outcome exactly once. Supply/assist stories cannot replace an attempt.',
+              },
+            }),
+          ];
+        } else {
+          const inventoryModes = schema.properties.composition.anyOf.filter(
+            (mode) =>
+              mode.properties.factIds &&
+              mode.properties.factIds.maxItems >= requiredRankedOutcomeIds.length,
+          );
+          if (!inventoryModes.length) requiredRankedOutcomeIds = [];
+          else schema.properties.composition.anyOf = inventoryModes;
+          for (const mode of inventoryModes) {
+            const ids = mode.properties.factIds;
+            if (ids.items.$ref === '#/$defs/canonicalFactId')
+              ids.items = structuredClone(schema.$defs.canonicalFactId);
+            ids.minItems = Math.max(ids.minItems || 0, requiredRankedOutcomeIds.length);
+            ids.items.enum = [...new Set([...(ids.items.enum || []), ...requiredRankedOutcomeIds])];
+            ids.description =
+              'Include every required ranking and distinct attempt outcome ' +
+              requiredRankedOutcomeIds.join(', ') +
+              '. Additional facts may answer separate explicit components; a supply/assist story cannot replace an attempt.';
+          }
         }
       }
       requiredRecoveredComparisonIds = null;
@@ -6934,14 +7140,31 @@ export async function answerMatchQuestionAI(
         : schema,
     );
     modelCalls++;
-    const result = await azureCompletion(messages, {
-      config,
-      fetcher,
-      signal,
-      responseFormat: format,
-      temperature: 0,
-      maxCompletionTokens,
-      timeoutMs: 30000,
+    let result;
+    try {
+      result = await azureCompletion(messages, {
+        config,
+        fetcher,
+        signal,
+        responseFormat: format,
+        temperature: 0,
+        maxCompletionTokens,
+        timeoutMs: 30000,
+      });
+    } catch (error) {
+      emitQuestionDiagnostic(onDiagnostic, {
+        type: 'stage',
+        stage,
+        elapsedMs: Date.now() - stageStarted,
+        outcome: 'failed',
+      });
+      throw error;
+    }
+    emitQuestionDiagnostic(onDiagnostic, {
+      type: 'stage',
+      stage,
+      elapsedMs: Date.now() - stageStarted,
+      outcome: 'completed',
     });
     usage.promptTokens += result.usage?.prompt_tokens || 0;
     usage.completionTokens += result.usage?.completion_tokens || 0;
@@ -7554,6 +7777,23 @@ export async function answerMatchQuestionAI(
       if (first?.explanationTarget === 'causal-attribution') requestedForm = 'explanation';
       explanationTarget = first?.explanationTarget ?? null;
       answerFocus = first?.answerFocus ?? null;
+      if (
+        explanationTarget === 'statistic-definition' &&
+        (asksActualMatchOccurrence(input.question) ||
+          statisticDefinitionRequestScope(input.question, requestComponents(input.question)) ===
+            'match')
+      )
+        explanationTarget = requestedForm === 'fact' ? 'none' : 'other';
+      pickBasisOnly = playerPickBasisRequest(
+        input,
+        first,
+        requestComponents(input.question),
+        roster,
+      );
+      if (pickBasisOnly) {
+        requestedForm = 'assessment';
+        if (explanationTarget === 'decision-rationale') explanationTarget = 'other';
+      }
       exclusiveQueryRoute = plannedResponse?.decision?.kind === 'queries';
       generalRoute = plannedResponse?.decision?.kind === 'general';
       footballKnowledge = null;
@@ -7683,7 +7923,10 @@ export async function answerMatchQuestionAI(
           );
         if (
           explanationTarget === 'statistic-definition' &&
-          (forbidPureDefinition || requestComponents(input.question).some(explicitCountDemand))
+          (forbidPureDefinition ||
+            requestComponents(input.question).some(explicitCountDemand) ||
+            statisticDefinitionRequestScope(input.question, requestComponents(input.question)) ===
+              'mixed')
         ) {
           requireMatchRoute = true;
           forbidPureDefinition = true;
@@ -9118,6 +9361,20 @@ export async function answerMatchQuestionAI(
           'question-invalid-fact-selection',
         );
       if (
+        requiredRankedOutcomeIds.length &&
+        (!Array.isArray(candidate.composition?.factIds) ||
+          requiredRankedOutcomeIds.some((id) => !candidate.composition.factIds.includes(id)) ||
+          new Set(candidate.composition.factIds).size !== candidate.composition.factIds.length ||
+          (rankedOutcomeOnly &&
+            (compositionMode !== 'facts' ||
+              candidate.composition.factIds.length !== requiredRankedOutcomeIds.length)))
+      )
+        throw new GenerationError(
+          'The complete ranked outcome answer must retain its ranking and every distinct current attempt outcome; a supply/assist story cannot substitute for an attempt.',
+          502,
+          'question-invalid-fact-selection',
+        );
+      if (
         requiredRecoveredComparisonIds?.length &&
         (candidate.composition?.mode !== 'explanation' ||
           candidate.composition.factIds?.length !== requiredRecoveredComparisonIds.length ||
@@ -9162,6 +9419,17 @@ export async function answerMatchQuestionAI(
       )
         throw new GenerationError(
           'The goal endpoint repair must select its exact complete canonical narrative.',
+          502,
+          'question-invalid-fact-selection',
+        );
+      if (
+        closedEndpointStoryId &&
+        (candidate.composition?.mode !== 'facts' ||
+          candidate.composition.factIds?.length !== 1 ||
+          candidate.composition.factIds[0] !== closedEndpointStoryId)
+      )
+        throw new GenerationError(
+          'The complete endpoint-bound buildup must retain its single current canonical story without unrelated facts or repeated prose.',
           502,
           'question-invalid-fact-selection',
         );
@@ -9747,17 +10015,35 @@ export async function answerMatchQuestionAI(
     const requestAdequacy = reviewRequestAdequacy(review, checked, modelPacket, {
       canonicalFactSelection: factSelection,
     });
-    const reviewComplete =
-      !requestAdequacy.length &&
-      reviewCoverageMatches(review, checked, input.question) &&
-      ruleReviewComplete(review, checked, footballKnowledge) &&
-      ['answered', 'corrected-premise', 'useful-limitation', 'clarification'].includes(
-        review.requestCheck?.status,
-      ) &&
-      reviewSupportsEveryClaim(review, checked.claims.length) &&
-      review.checks.every(
-        (check) => Array.isArray(check.inventedFacts) && check.inventedFacts.length === 0,
-      );
+    const reviewPredicateChecks = {
+      requestAdequacy: () => !requestAdequacy.length,
+      coverage: () => reviewCoverageMatches(review, checked, input.question),
+      rules: () => ruleReviewComplete(review, checked, footballKnowledge),
+      requestStatus: () =>
+        ['answered', 'corrected-premise', 'useful-limitation', 'clarification'].includes(
+          review.requestCheck?.status,
+        ),
+      claimSupport: () => reviewSupportsEveryClaim(review, checked.claims.length),
+      inventedFacts: () =>
+        review.checks.every(
+          (check) => Array.isArray(check.inventedFacts) && check.inventedFacts.length === 0,
+        ),
+    };
+    const reviewPredicates = {};
+    // Preserve the original predicate order and short-circuit rejection. Only
+    // diagnostic evaluation of remaining predicates catches its own failures.
+    const reviewComplete = Object.entries(reviewPredicateChecks).every(
+      ([name, check]) => (reviewPredicates[name] = check()),
+    );
+    if (typeof onDiagnostic === 'function')
+      for (const [name, check] of Object.entries(reviewPredicateChecks))
+        if (!Object.hasOwn(reviewPredicates, name)) {
+          try {
+            reviewPredicates[name] = check();
+          } catch {
+            reviewPredicates[name] = null;
+          }
+        }
     // A typed zero-action correction is rendered from its verified count, not model prose.
     // Keep the reviewer’s coverage/support verdict, but do not reinterpret its negated
     // action as a positive individual action when validating model-authored prose.
@@ -9769,12 +10055,25 @@ export async function answerMatchQuestionAI(
           !(checked.aiSelectedCorrection && check.claimIndex === checked.claims.length - 1),
       ),
     };
-    const actorIssues = reviewComplete
-      ? [
-          ...reviewActorIssues(proseReview, matchChecked, modelPacket),
-          ...reviewCountIssues(proseReview, matchChecked, modelPacket),
-        ]
-      : [];
+    const actorValidationIssues = reviewComplete
+        ? reviewActorIssues(proseReview, matchChecked, modelPacket)
+        : [],
+      countValidationIssues = reviewComplete
+        ? reviewCountIssues(proseReview, matchChecked, modelPacket)
+        : [],
+      actorIssues = [...actorValidationIssues, ...countValidationIssues];
+    emitQuestionDiagnostic(onDiagnostic, {
+      type: 'review',
+      reviewComplete,
+      predicates: reviewPredicates,
+      actorValidationRan: reviewComplete,
+      actorIssueCount: actorValidationIssues.length,
+      countIssueCount: countValidationIssues.length,
+      requestAdequacyIssueCount: requestAdequacy.length,
+      claimCount: checked.claims.length,
+      reviewCheckCount: Array.isArray(review.checks) ? review.checks.length : null,
+      decision: review.decision,
+    });
     if (!reviewComplete || actorIssues.length) {
       const error = new GenerationError(
         'I could not support that answer with the available match data.',

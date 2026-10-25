@@ -7,7 +7,7 @@ export function requestedPlayerRankings(definitions, run, sources = []) {
   for (const [index, query] of (definitions || []).entries()) {
     if (
       query.aggregate !== 'by-player' ||
-      query.groupOrder !== 'count-desc' ||
+      (sources[index]?.query?.groupOrder || query.groupOrder) !== 'count-desc' ||
       query.limit !== 1 ||
       query.relativeTo ||
       (query.groupCount && Object.keys(query.groupCount).length) ||

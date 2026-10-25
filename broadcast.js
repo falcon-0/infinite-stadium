@@ -26,6 +26,11 @@ export function broadcastFrame(input, previous = null, messages) {
   const oldOverlays = new Map((previous?.recap.overlays || []).map((e) => [e.id, e]));
   const currentIds = new Set(recap.overlays.map((e) => e.id));
   const eventIds = new Set(state.events.map((e) => e.id));
+  const positionUpserts = changed(state.frames, previous?.state.frames);
+  // The client remembers current upserts in positionHistory too. Omit only
+  // identical serialized records from a fresh history snapshot; retain older
+  // revisions and conflicting contents so client validation still sees them.
+  const currentPositions = !previous && new Set(positionUpserts.map((f) => JSON.stringify(f)));
   return {
     bundle,
     message: {
@@ -54,11 +59,12 @@ export function broadcastFrame(input, previous = null, messages) {
           : {}),
       },
       positions: {
-        upserts: changed(state.frames, previous?.state.frames),
+        upserts: positionUpserts,
         ...(!previous
           ? {
               history: feed.frames
                 .filter((f) => f.time <= state.time && f.arrivedAt <= state.time)
+                .filter((f) => !currentPositions.has(JSON.stringify(f)))
                 .map((f) => structuredClone(f)),
             }
           : {}),
