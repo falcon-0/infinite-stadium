@@ -1,3 +1,4 @@
+import { explicitEventRelations, relativeKeeperWitnessPair } from './relative-event-planning.js';
 import { linkedRecoveryContextFacts } from './question-linked-context.js';
 import { linkedActionCoveragePolicy } from './question-policies.js';
 import { resolvePlayerClarification } from './question-clarification-context.js';
@@ -1414,10 +1415,18 @@ export function inventoryDependencyCovers(part, answer, packet, demand) {
     return false;
   return demand.source === 'roster' && dependency.requiredForFields.includes(demand.sourceField);
 }
+// Coverage components omit a terminal question mark. Keep every lexical character
+// and the packet's literal-source check; do not rewrite words, accents or clauses.
+function sourceRequestSpanContains(container, span) {
+  if (typeof container !== 'string' || typeof span !== 'string' || !span) return false;
+  if (container.includes(span)) return true;
+  const withoutQuestionMark = span.replace(/\s*[?？؟]\s*$/u, '').trimEnd();
+  return withoutQuestionMark.length > 0 && container.includes(withoutQuestionMark);
+}
 export function requestedSourceAttributeIssues(part, answer, packet, selection, reviewChecks = []) {
   const declared = part.requestedSourceAttributes;
   const retained = (packet.requestedSourceAttributes || []).filter((demand) =>
-    part.requestSpan?.includes(demand.requestSpan),
+    sourceRequestSpanContains(part.requestSpan, demand.requestSpan),
   );
   if (
     Array.isArray(packet.requestedSourceAttributes) &&
@@ -1476,7 +1485,7 @@ export function requestedSourceAttributeIssues(part, answer, packet, selection, 
     if (
       !demand ||
       !demand.requestSpan ||
-      !part.requestSpan?.includes(demand.requestSpan) ||
+      !sourceRequestSpanContains(part.requestSpan, demand.requestSpan) ||
       !packet.question?.includes(demand.requestSpan) ||
       !['event', 'roster'].includes(demand.source) ||
       typeof demand.sourceField !== 'string' ||
@@ -5933,6 +5942,24 @@ export async function answerMatchQuestionAI(
       schema.properties.decision.anyOf = schema.properties.decision.anyOf.filter((branch) =>
         branch.properties.kind.enum.includes('queries'),
       );
+    if (planningStage && stage === 'planning-repair') {
+      const correction = JSON.parse(messages.at(-1).content).planningCorrection;
+      if (correction?.kind === 'missing-event-dependent-query') {
+        const queries = schema.properties.decision.anyOf.find((branch) =>
+          branch.properties.kind.enum.includes('queries'),
+        )?.properties.queries;
+        if (queries?.items?.anyOf && requestComponents(input.question).length === 1) {
+          // An identity-only dependency cannot repair a missing temporal lookup.
+          // Keep plain anchor queries and real before/after dependencies; all
+          // actor, boundary and coverage proofs are still checked at execution.
+          queries.items.anyOf = queries.items.anyOf.filter(
+            (variant) =>
+              !variant.properties.relativeTo?.properties?.relation?.enum?.includes('none'),
+          );
+          queries.minItems = 2;
+        }
+      }
+    }
     if (stage === 'review') {
       const components = requestComponents(input.question),
         coverage = schema.properties.requestCheck.properties.coverage;
@@ -6812,6 +6839,29 @@ export async function answerMatchQuestionAI(
           )
         )
           requiredRecoveredComparisonIds = ids;
+      }
+    }
+    if (
+      canonicalStage &&
+      requestedForm === 'fact' &&
+      modelPacket.requestComponents?.length === 1 &&
+      explicitEventRelations(input.question).length === 1
+    ) {
+      const pair = relativeKeeperWitnessPair(matchFactManifest, modelPacket.queryRelations);
+      if (pair) {
+        schema.properties.composition.anyOf = [
+          strictObject({
+            mode: { type: 'string', enum: ['facts'] },
+            factIds: {
+              type: 'array',
+              minItems: 2,
+              maxItems: 2,
+              items: { type: 'string', enum: pair },
+              description:
+                'Select both distinct facts: the source-linked collector and the exact requested relative-event anchor. Neither alone proves the requested relationship.',
+            },
+          }),
+        ];
       }
     }
     if (canonicalStage)
@@ -8081,6 +8131,45 @@ export async function answerMatchQuestionAI(
           };
           throw error;
         }
+      }
+      // Repair an incomplete event-relative plan before composing prose. Existing
+      // ordered-source and independent coverage checks still prove the answer.
+      const missingEventRelations = explicitEventRelations(input.question).filter(
+        (demand) =>
+          !queryRelations.some((binding) => binding.relation === demand.relation) &&
+          !(
+            demand.anchorType === 'goal' &&
+            planned.some(
+              (source) =>
+                source.query.aggregate === 'list' &&
+                source.query.limit === 1 &&
+                source.rows?.length === 1 &&
+                source.rows[0].type === 'shot' &&
+                actionOutcome(sourceById.get(source.rows[0].id)).status === 'goal',
+            )
+          ),
+      );
+      if (
+        !clarifyAmbiguousInput &&
+        keeperDemands.length &&
+        !generalRoute &&
+        !operation?.proofs.length &&
+        missingEventRelations.length
+      ) {
+        requireQueriesRoute = true;
+        const error = new GenerationError(
+          'The relative-event request needs its requested anchor and an executed dependent lookup before composing an answer.',
+          502,
+          'question-invalid-operation',
+        );
+        error.planningCorrection = {
+          kind: 'missing-event-dependent-query',
+          allowedRoutes: ['queries'],
+          requiredRelations: missingEventRelations,
+          instruction:
+            'Retrieve each requested event anchor with its own actor and outcome filters, then query the requested action using relativeTo.queryIndex and the before/after relation. A saved-shot collection link establishes the keeper role, not its relation to a separately requested goal. Preserve the full question and do not add a same-player or same-team restriction unless asked. Do not invent an answer or replace the anchor with current playback time.',
+        };
+        throw error;
       }
       const ordinalDemand = explicitOrdinalRelation(input.question);
       if (
@@ -9677,7 +9766,7 @@ export async function answerMatchQuestionAI(
                   }
                 : { claimIndex: index, source: 'model-interpretation', modelGenerated: true },
       );
-      const pruned = pruneUncoveredCanonicalFacts(checked, review);
+      const pruned = pruneUncoveredCanonicalFacts(checked, review, { requestedForm, answerFocus });
       checked = pruned.answer;
       review = pruned.review;
     }

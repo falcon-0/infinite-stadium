@@ -1,7 +1,7 @@
 // This runs only after factual guards and semantic review have approved an
 // answer. It removes unused application-rendered facts, never rewrites prose
 // or infers relevance from words. Invalid/legacy metadata leaves it unchanged.
-export function pruneUncoveredCanonicalFacts(answer, review) {
+export function pruneUncoveredCanonicalFacts(answer, review, context = {}) {
   const unchanged = () => ({
     answer: structuredClone(answer),
     review: structuredClone(review),
@@ -103,7 +103,96 @@ export function pruneUncoveredCanonicalFacts(answer, review) {
         ),
     ),
   );
-  const effectiveCoverage = coverage.map((part) => {
+  // A single positive collection already answers an occurrence lookup. Its
+  // complete one-player/one-action ranking adds no other occurrence. Only use
+  // this equivalence after both planner and reviewer identify a factual lookup;
+  // quantitative, comparative, temporal and explanatory uses stay untouched.
+  const intent = review.requestCheck.responseIntent;
+  const occurrenceLookup =
+    context.requestedForm === 'fact' &&
+    context.answerFocus === 'event-actor' &&
+    intent?.purpose === 'fact-retrieval' &&
+    [
+      'needsAssessment',
+      'needsExplicitCorrection',
+      'needsScoreline',
+      'needsMeasurementLimitation',
+    ].every((key) => intent[key] === false) &&
+    coverage.every(
+      (part) =>
+        part.answerForm === 'fact' &&
+        part.requestedQuantity === null &&
+        part.temporalRelation === 'none',
+    );
+  const redundantRankings = new Set();
+  if (occurrenceLookup)
+    for (const [index, factId] of canonical) {
+      const ranking = selection.proofs.find((proof) => proof.factId === factId);
+      if (
+        ranking?.kind !== 'player-count-ranking' ||
+        ranking.modelGenerated !== false ||
+        ranking.metric !== 'savedAttemptCollections' ||
+        ranking.value !== 1 ||
+        ranking.totalCount !== 1 ||
+        ranking.matchedGroupCount !== 1 ||
+        ranking.leaders?.length !== 1 ||
+        ranking.leaders[0].count !== 1 ||
+        ranking.groups?.length !== 1 ||
+        ranking.groups[0].count !== 1 ||
+        ranking.groups[0].id !== ranking.leaders[0].id ||
+        ranking.query?.aggregate !== 'by-player' ||
+        JSON.stringify(Object.entries(ranking.query.filters || {}).sort()) !==
+          JSON.stringify(
+            Object.entries({
+              type: 'recovery',
+              recoveryKind: 'goalkeeper-hold',
+              linkedShotOutcome: 'saved',
+            }).sort(),
+          )
+      )
+        continue;
+      const witness = [...canonical].find(([otherIndex, otherId]) => {
+        if (otherIndex === index) return false;
+        const hold = selection.proofs.find((proof) => proof.factId === otherId);
+        const window = hold?.orderedShot;
+        return (
+          hold?.kind === 'linked-goalkeeper-hold' &&
+          hold.modelGenerated === false &&
+          hold.holderId === ranking.leaders[0].id &&
+          Number.isFinite(hold.time) &&
+          Number.isFinite(hold.shotTime) &&
+          hold.shotTime <= hold.time &&
+          window?.modelGenerated === false &&
+          window.metric === 'savedShots' &&
+          window.timeFrom === ranking.timeFrom &&
+          window.timeTo === ranking.timeTo &&
+          Number.isFinite(ranking.timeFrom) &&
+          Number.isFinite(ranking.timeTo) &&
+          hold.time >= ranking.timeFrom &&
+          hold.time <= ranking.timeTo &&
+          !ranking.query.timeFromExclusive &&
+          !ranking.query.timeToExclusive &&
+          !window.query?.timeFromExclusive &&
+          !window.query?.timeToExclusive
+        );
+      });
+      const uses = coverage.filter((part) => part.claimIndices.includes(index));
+      if (
+        witness &&
+        uses.length &&
+        uses.every(
+          (part) =>
+            ['shot', 'recovery'].includes(part.requestedAction) &&
+            part.claimIndices.includes(witness[0]),
+        )
+      )
+        redundantRankings.add(index);
+    }
+  const effectiveCoverage = coverage.map((originalPart) => {
+    const part = {
+      ...originalPart,
+      claimIndices: originalPart.claimIndices.filter((index) => !redundantRankings.has(index)),
+    };
     if (part.answerForm !== 'unavailable-measurement' || part.temporalRelation !== 'none')
       return part;
     const limitations = part.claimIndices.filter((index) => {

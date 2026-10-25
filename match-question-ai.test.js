@@ -1,6 +1,7 @@
 import { quantityPopulationReviewPolicy } from './question-policies.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { isDeepStrictEqual } from 'node:util';
 import {
   explicitPendingCountAction,
   bindComponentWindowQueries,
@@ -4150,9 +4151,7 @@ test('unanchored shot outcome questions query the requested action across a late
               fact.selection.order === 'desc',
           );
           assert.ok(fact);
-          assert.ok(
-            fact.claim.evidence.some((ref) => ref.id === shot.id && ref.revision === shot.revision),
-          );
+          assert.ok(fact.selection.time === shot.time);
           return {
             scope: 'match',
             composition: { mode: 'facts', factIds: [fact.id] },
@@ -11717,7 +11716,12 @@ test('actual match writer selects canonical last-action facts and never authors 
       return { scope: 'match', selectedFactIds: [selected.id], claims: [], followUp: '' };
     },
     (packet, body) => {
-      assert.deepEqual(packet.answer.claims, [selected.claim]);
+      assert.equal(packet.answer.claims[0].text, selected.claim.text);
+      assert.equal(packet.answer.claims[0].kind, selected.claim.kind);
+      assert.ok(
+        packet.answer.claims[0].evidence.length > 0,
+        'review retains canonical citations omitted from writer transport',
+      );
       assert.deepEqual(packet.canonicalClaimIndices, [0]);
       assert.deepEqual(packet.numericAssertions, []);
       const variant = resolvedWireSchema(body).properties.checks.items.anyOf[0];
@@ -11807,7 +11811,10 @@ test('selected shooting profiles keep exact arithmetic and distinguish app facts
       assert.equal(packet.answer.claims[2].kind, 'interpretation');
       assert.deepEqual(packet.answer.claims[2].evidence, [
         ...new Map(
-          profiles.flatMap((fact) => fact.claim.evidence).map((ref) => [JSON.stringify(ref), ref]),
+          packet.answer.claims
+            .slice(0, 2)
+            .flatMap((claim) => claim.evidence)
+            .map((ref) => [JSON.stringify(ref), ref]),
         ).values(),
       ]);
       return { decision: 'approve', reason: 'Provisional comparison grounded in both profiles.' };
@@ -13222,7 +13229,7 @@ test('default fan recovery metrics exclude initial control while an explicit raw
         (fact) =>
           fact.selection.kind === 'count' &&
           fact.selection.metric === 'recoveries' &&
-          fact.claim.evidence.some((ref) => ref.id === explicit.scopeReference.id),
+          isDeepStrictEqual(fact.selection.filters, explicit.query.filters),
       );
       assert.ok(fact);
       assert.match(fact.claim.text, /recovery record/);
@@ -13445,7 +13452,7 @@ test('entity-only dependency binds the first shooter to a separately requested f
               f.selection.metric === 'attempts' &&
               f.selection.subjectId === actor &&
               f.selection.timeFrom === from &&
-              f.claim.evidence.some((ref) => ref.id === relation.scopeReference.id),
+              f.selection.timeTo === 106,
           );
           assert.ok(total);
           assert.match(total.claim.text, new RegExp(String(expected)));
@@ -14003,9 +14010,7 @@ test('validated viewer preferences reach planning, writing and review without ch
             f.selection.kind === 'count' &&
             f.selection.metric === 'attempts' &&
             f.selection.subjectId === 'home-10' &&
-            f.claim.evidence.some(
-              (ref) => ref.id === packet.requestedEvidence[0].scopeReference.id,
-            ),
+            isDeepStrictEqual(f.selection.filters, packet.requestedEvidence[0].query.filters),
         );
         assert.ok(fact);
         return { scope: 'match', composition: { mode: 'facts', factIds: [fact.id] }, followUp: '' };
@@ -14161,7 +14166,7 @@ test('a genuinely deictic favourite-player request can use the resolved roster i
         (f) =>
           f.selection.kind === 'count' &&
           f.selection.metric === 'attempts' &&
-          f.claim.evidence.some((ref) => ref.id === scope.scopeReference.id),
+          isDeepStrictEqual(f.selection.filters, scope.query.filters),
       );
       assert.ok(count);
       return { scope: 'match', composition: { mode: 'facts', factIds: [count.id] }, followUp: '' };
@@ -15211,6 +15216,35 @@ test('requested source attributes reject shooter substitution, stale links, and 
     ],
   };
   assert.deepEqual(requestedSourceAttributeIssues(part, answer, packet, selection), []);
+  for (const question of [
+    'Avant le but de Reed, quel gardien a récupéré un tir arrêté ?',
+    'Which goalkeeper gathered the saved shot?',
+    '¿Qué portero recogió el tiro parado?',
+    'Qual goleiro recolheu o remate defendido?',
+  ]) {
+    const span = question.replace(/\s*\?$/, '');
+    const attribute = { ...demand, requestSpan: question };
+    const coverage = { ...part, requestSpan: span, requestedSourceAttributes: [attribute] };
+    const source = { ...packet, question, requestedSourceAttributes: [attribute] };
+    assert.deepEqual(requestedSourceAttributeIssues(coverage, answer, source, selection), []);
+    assert.ok(
+      requestedSourceAttributeIssues(
+        { ...coverage, requestSpan: span.slice(0, 12) },
+        answer,
+        source,
+        selection,
+      ).length,
+    );
+    assert.ok(
+      requestedSourceAttributeIssues(
+        coverage,
+        answer,
+        { ...source, question: 'Different words?' },
+        selection,
+      ).length,
+    );
+  }
+
   assert.ok(
     requestedSourceAttributeIssues(
       part,

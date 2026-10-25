@@ -101,7 +101,10 @@ export function writerPacket(packet) {
       ...compact.matchFacts,
       facts: compact.matchFacts.facts.map(({ id, claim, proof }) => ({
         id,
-        claim,
+        // The writer returns fact IDs, never citations. Source references remain
+        // on the canonical manifest for rendering, validation and independent
+        // review; sending them for every selectable fact repeats that machinery.
+        claim: Object.fromEntries(Object.entries(claim).filter(([key]) => key !== 'evidence')),
         selection: Object.fromEntries(
           Object.entries({
             kind: proof.kind,
@@ -113,7 +116,7 @@ export function writerPacket(packet) {
             eventType: proof.eventType,
             recipient: proof.recipient ?? proof.event?.recipient,
             attributes: proof.attributes,
-            time: proof.time,
+            time: proof.time ?? proof.event?.time,
             timeFrom: proof.timeFrom,
             timeTo: proof.timeTo,
             timeFromExclusive: proof.timeFromExclusive,

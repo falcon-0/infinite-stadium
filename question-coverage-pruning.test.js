@@ -2,6 +2,169 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { pruneUncoveredCanonicalFacts } from './question-coverage-pruning.js';
 
+function occurrenceFixture() {
+  const ids = ['hold', 'ranking'];
+  const answer = {
+    claims: ids.map(fact),
+    claimProvenance: ids.map((factId, claimIndex) => ({
+      claimIndex,
+      factId,
+      source: 'verified-query-fact',
+      modelGenerated: false,
+    })),
+    canonicalFactSelection: {
+      selectedFactIds: ids,
+      requestedFactIds: ids,
+      originalToSelectedIndex: [0, 1],
+      dependencyMappings: [],
+      proofs: [
+        {
+          factId: 'hold',
+          kind: 'linked-goalkeeper-hold',
+          modelGenerated: false,
+          holderId: 'away-1',
+          time: 98,
+          shotTime: 96,
+          orderedShot: {
+            modelGenerated: false,
+            metric: 'savedShots',
+            timeFrom: 0,
+            timeTo: 120,
+            query: {},
+          },
+        },
+        {
+          factId: 'ranking',
+          kind: 'player-count-ranking',
+          modelGenerated: false,
+          metric: 'savedAttemptCollections',
+          value: 1,
+          totalCount: 1,
+          matchedGroupCount: 1,
+          leaders: [{ id: 'away-1', count: 1 }],
+          groups: [{ id: 'away-1', count: 1 }],
+          timeFrom: 0,
+          timeTo: 120,
+          query: {
+            aggregate: 'by-player',
+            filters: {
+              type: 'recovery',
+              recoveryKind: 'goalkeeper-hold',
+              linkedShotOutcome: 'saved',
+            },
+          },
+        },
+      ],
+    },
+  };
+  const review = {
+    decision: 'approve',
+    checks: ids.map((_id, claimIndex) => ({ claimIndex, supported: true, inventedFacts: [] })),
+    requestCheck: {
+      status: 'answered',
+      responseIntent: {
+        purpose: 'fact-retrieval',
+        needsAssessment: false,
+        needsExplicitCorrection: false,
+        needsScoreline: false,
+        needsMeasurementLimitation: false,
+      },
+      coverage: [
+        {
+          requestSpan: 'Has either keeper made a save?',
+          answerForm: 'fact',
+          requestedAction: 'shot',
+          requestedQuantity: null,
+          temporalRelation: 'none',
+          claimIndices: [0, 1],
+        },
+      ],
+    },
+  };
+  return { answer, review, context: { requestedForm: 'fact', answerFocus: 'event-actor' } };
+}
+
+test('an occurrence lookup omits a redundant one-action ranking without rewriting the linked save', () => {
+  const { answer, review, context } = occurrenceFixture();
+  const before = structuredClone({ answer, review });
+  const result = pruneUncoveredCanonicalFacts(answer, review, context);
+  assert.equal(result.pruned, true);
+  assert.deepEqual(result.answer.claims, [answer.claims[0]]);
+  assert.deepEqual(result.review.requestCheck.coverage[0].claimIndices, [0]);
+  assert.deepEqual(result.answer.canonicalFactSelection.selectedFactIds, ['hold']);
+  assert.deepEqual({ answer, review }, before);
+});
+
+test('requested quantities, comparisons, distinct actors/windows and incomplete proofs retain rankings', () => {
+  for (const mutate of [
+    (x) => {
+      x.context.requestedForm = 'assessment';
+    },
+    (x) => {
+      x.context.answerFocus = 'player-assessment';
+    },
+    (x) => {
+      x.review.requestCheck.responseIntent.purpose = 'assessment';
+    },
+    (x) => {
+      x.review.requestCheck.responseIntent.needsAssessment = true;
+    },
+    (x) => {
+      x.review.requestCheck.coverage[0].requestedQuantity = { state: 'any', grouping: 'by-player' };
+    },
+    (x) => {
+      delete x.review.requestCheck.coverage[0].requestedQuantity;
+    },
+    (x) => {
+      x.review.requestCheck.coverage[0].answerForm = 'assessment';
+    },
+    (x) => {
+      x.review.requestCheck.coverage[0].temporalRelation = 'after-requested-event';
+    },
+    (x) => {
+      x.review.requestCheck.coverage[0].claimIndices = [1];
+    },
+    (x) => {
+      x.answer.canonicalFactSelection.proofs[1].leaders.push({ id: 'home-1', count: 1 });
+    },
+    (x) => {
+      x.answer.canonicalFactSelection.proofs[1].totalCount = 2;
+    },
+    (x) => {
+      x.answer.canonicalFactSelection.proofs[1].groups[0].id = 'home-1';
+    },
+    (x) => {
+      x.answer.canonicalFactSelection.proofs[1].timeFrom = 90;
+    },
+    (x) => {
+      x.answer.canonicalFactSelection.proofs[1].query.timeToExclusive = true;
+    },
+    (x) => {
+      x.answer.canonicalFactSelection.proofs[1].query.filters.team = 'home';
+    },
+    (x) => {
+      x.answer.canonicalFactSelection.proofs[0].holderId = 'home-1';
+    },
+    (x) => {
+      x.answer.canonicalFactSelection.proofs[0].modelGenerated = true;
+    },
+    (x) => {
+      x.answer.canonicalFactSelection.proofs[0].time = 122;
+    },
+    (x) => {
+      delete x.answer.canonicalFactSelection.proofs[0].orderedShot;
+    },
+    (x) => {
+      x.answer.claimDependencies = [{ claimIndex: 0, observationIndices: [1] }];
+    },
+  ]) {
+    const state = occurrenceFixture();
+    mutate(state);
+    const result = pruneUncoveredCanonicalFacts(state.answer, state.review, state.context);
+    assert.ok(result.answer.canonicalFactSelection.selectedFactIds.includes('ranking'));
+  }
+});
+
 const fact = (id) => ({
   text: `Verified fact ${id}.`,
   kind: 'observation',
