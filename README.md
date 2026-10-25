@@ -2,7 +2,7 @@
 
 A football companion that answers questions about the moment you are watching while the match keeps moving.
 
-[Open the demo](https://infinite-stadium-lime.vercel.app/?view=watch) · [Run locally](docs/JUDGE_SETUP.md) · [Developer guide](docs/CONTRIBUTING.md) · [Architecture and deployment](docs/DEPLOYMENT.md) · [Validation](docs/VALIDATION_PLAN.md)
+[Watch the 118-second demo](https://youtu.be/Ay6WmVt-LIA) · [Open the app](https://infinite-stadium-lime.vercel.app/?view=watch) · [Run locally](docs/JUDGE_SETUP.md) · [Developer guide](docs/CONTRIBUTING.md) · [Architecture and deployment](docs/DEPLOYMENT.md) · [Validation](docs/VALIDATION_PLAN.md)
 
 ## Watch, ask, understand
 
@@ -56,11 +56,13 @@ Tests sit beside their modules. They are retained to make behavior reviewable. O
 
 ## Evidence and practical limits
 
-The October 22 R14 release passed all eight local gates: 1,351 tests passed, one platform skip and zero failures. Six selected hosted Azure regression questions passed semantic checks for French follow-ups, keeper timing, independent scorer answers and Spanish shot share. Server processing took 6.0–12.3 seconds across those six cases, using two or three model calls each. These are tuned development cases, not a representative accuracy benchmark or a latency guarantee. Earlier failures remain in private development records.
+The October 22 release passed all eight local gates: 1,351 tests passed, one platform skip and zero failures. Six selected hosted Azure regression questions passed semantic checks for French follow-ups, keeper timing, independent scorer answers and Spanish shot share. Server processing took 6.0–12.3 seconds across those six cases, using two or three model calls each. These are tuned development cases, not a representative accuracy benchmark or a latency guarantee. Earlier failures remain in private development records.
 
 An isolated browser check against the public website also verified a real French Azure answer: the question stayed pinned at 01:46 while playback continued to 02:00. The answer correctly identified the last completed pass at 01:42 and zero failed passes. That request took 12.8 seconds of server processing and three model calls. The accepted Watch UI is unchanged. Private raw traces stay local; the compact record below contains the inputs, results, scope and remaining limitations.
 
-See [the compact evidence record](docs/EVALUATION_EVIDENCE.json) and [research](docs/RESEARCH.md). AI interpretation remains fallible, and unavailable intentions, pressing causes or chance quality must not be invented. The short passages do not establish a full-match player award or future winner. Azure availability depends on the configured account, quota and credit. The public source is available at [falcon-0/infinite-stadium](https://github.com/falcon-0/infinite-stadium). Final video approval and judging-period continuity remain separate delivery checks.
+The October 25 deployed application passed eight local gates with 1,408 tests passed, one skip and zero failures. Four selected hosted regressions covered English shot outcomes, a French linked buildup, a Spanish team comparison and a repeated French request. Application processing took 4.658–9.251 seconds with two or three model calls. These differ from the earlier question set and do not establish a general speed improvement. Browser transport delays can make the visible wait substantially longer; that issue remains unresolved.
+
+See [the compact evidence record](docs/EVALUATION_EVIDENCE.json), [submission status](docs/SUBMISSION.md) and [research](docs/RESEARCH.md). AI interpretation remains fallible, and unavailable intentions, pressing causes or chance quality must not be invented. The short passages do not establish a full-match player award or future winner. Azure availability depends on the configured account, quota and credit. The public source is available at [falcon-0/infinite-stadium](https://github.com/falcon-0/infinite-stadium), whose default branch is `codex/submission-release`. The approved demo is uploaded and linked on the hackathon project page; judge-access delivery and judging-period provider continuity remain unresolved.
 
 ## Build a clean source handoff
 
