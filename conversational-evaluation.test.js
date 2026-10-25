@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -192,6 +192,13 @@ test('source fingerprint detects dirty prompt changes independent of git commit'
     const after = captureEvaluationIdentity(directory);
     assert.notEqual(before.buildFingerprint, after.buildFingerprint);
     assert.notEqual(before.promptFingerprint, after.promptFingerprint);
+    mkdirSync(join(directory, 'ai'));
+    writeFileSync(join(directory, 'ai', 'composition-schema.js'), 'schema-v1');
+    const schemaBefore = captureEvaluationIdentity(directory);
+    writeFileSync(join(directory, 'ai', 'composition-schema.js'), 'schema-v2');
+    const schemaAfter = captureEvaluationIdentity(directory);
+    assert.notEqual(schemaBefore.buildFingerprint, schemaAfter.buildFingerprint);
+    assert.notEqual(schemaBefore.promptFingerprint, schemaAfter.promptFingerprint);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

@@ -1,4 +1,5 @@
 import { createStreamCadence } from './stream-cadence.js';
+import { createEventStreamTransport } from './stream-transport.js';
 import { randomUUID } from 'node:crypto';
 import {
   createQuestionDiagnostics,
@@ -344,12 +345,7 @@ export function createServer({
           }
           input.time = time;
         }
-        res.writeHead(200, {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          Connection: 'keep-alive',
-          'X-Accel-Buffering': 'no',
-        });
+        const writer = createEventStreamTransport(req, res);
         streams++;
         let previous = null,
           timer = null,
@@ -367,13 +363,13 @@ export function createServer({
           try {
             const frame = broadcastFrame(input, previous, feed);
             previous = frame.bundle;
-            const ready = res.write(
+            const ready = writer.write(
               `id: ${input.kind}:${input.seed}:${input.time}\nevent: match\ndata: ${JSON.stringify(frame.message)}\n\n`,
             );
             if (input.time >= previous.state.metadata.observationHorizon) {
-              res.write('event: complete\ndata: {}\n\n');
+              writer.write('event: complete\ndata: {}\n\n');
               close();
-              res.end();
+              writer.end();
               return;
             }
             input.time = Math.min(previous.state.metadata.observationHorizon, input.time + 1);
@@ -381,11 +377,11 @@ export function createServer({
               if (!closed) timer = setTimeout(tick, nextDelay());
             };
             if (ready) schedule();
-            else res.once('drain', schedule);
+            else writer.once('drain', schedule);
           } catch {
-            res.write('event: error\ndata: {"error":"Stream stopped."}\n\n');
+            writer.write('event: error\ndata: {"error":"Stream stopped."}\n\n');
             close();
-            res.end();
+            writer.end();
           }
         };
         tick();

@@ -17,8 +17,8 @@
     "validate:data": "node fixture-validation-cli.js",
     "evaluate:catalogue": "node catalogue-evaluation-cli.js",
     "verify:release": "node release-check.js",
-    "format": "prettier --write \"*.js\" \"api/*.js\"",
-    "format:check": "prettier --check \"*.js\" \"api/*.js\""
+    "format": "prettier --write \"*.js\" \"api/*.js\" \"ai/*.js\"",
+    "format:check": "prettier --check \"*.js\" \"api/*.js\" \"ai/*.js\""
   },
   "devDependencies": {
     "prettier": "3.6.2"

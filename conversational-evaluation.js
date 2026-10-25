@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -74,6 +74,15 @@ export function captureEvaluationIdentity(directory = process.cwd()) {
   const files = readdirSync(directory)
     .filter((name) => name.endsWith('.js') && !name.endsWith('.test.js'))
     .sort();
+  const schemaDirectory = resolve(directory, 'ai');
+  if (existsSync(schemaDirectory)) {
+    files.push(
+      ...readdirSync(schemaDirectory)
+        .filter((name) => name.endsWith('.js') && !name.endsWith('.test.js'))
+        .map((name) => `ai/${name}`),
+    );
+    files.sort();
+  }
   const hashes = Object.fromEntries(
     files.map((name) => [
       name,
@@ -87,6 +96,7 @@ export function captureEvaluationIdentity(directory = process.cwd()) {
     'question-policies.js',
     'question-evidence-check.js',
     'ai.js',
+    ...files.filter((name) => name.startsWith('ai/')),
   ];
   for (const name of promptFiles) if (!hashes[name]) fail(`Missing identity source: ${name}`);
   const git = (args) => {
