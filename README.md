@@ -12,6 +12,10 @@ The application computes supported statistics and event order. Azure AI interpre
 
 Twenty fixtures cover five authored two-minute passage families. The schematic replay runs at a fixed 2× pace with compact statistics, timed narratives and a recap. Viewing options change the audience detail and language of subsequent supported content. English, Spanish, French and Portuguese paths are implemented; menus and some general rules remain English. This is synthetic football data with fictional teams and players, not licensed Premier League footage or video recognition.
 
+![Infinite Stadium synthetic match replay](docs/images/watch.png)
+
+Actual hosted Watch interface. The replay is available without signing in; live AI uses the separately supplied project access code.
+
 ## Run locally
 
 Use Node.js 24. No package installation or credentials are needed for the synthetic replay.
@@ -60,7 +64,9 @@ The October 22 release passed all eight local gates: 1,351 tests passed, one pla
 
 An isolated browser check against the public website also verified a real French Azure answer: the question stayed pinned at 01:46 while playback continued to 02:00. The answer correctly identified the last completed pass at 01:42 and zero failed passes. That request took 12.8 seconds of server processing and three model calls. The accepted Watch UI is unchanged. Private raw traces stay local; the compact record below contains the inputs, results, scope and remaining limitations.
 
-The October 25 deployed application passed eight local gates with 1,408 tests passed, one skip and zero failures. Four selected hosted regressions covered English shot outcomes, a French linked buildup, a Spanish team comparison and a repeated French request. Application processing took 4.658–9.251 seconds with two or three model calls. These differ from the earlier question set and do not establish a general speed improvement. Browser transport delays can make the visible wait substantially longer; that issue remains unresolved.
+The October 25 deployed application passed eight local gates with 1,408 tests passed, one skip and zero failures. Four selected hosted regressions covered English shot outcomes, a French linked buildup, a Spanish team comparison and a repeated French request. Application processing took 4.658–9.251 seconds with two or three model calls. These differ from the earlier question set and do not establish a general speed improvement. The subsequent replay transfer fix was checked separately on the same first event with gzip and identity encodings. Gzip transferred approximately 31 KB instead of 225 KB and delivered that event in approximately 0.47 seconds versus 1.53–1.61 seconds in the controlled staging sample. The decoded event hashes matched. Two hosted Watch runs confirmed seeking and continued playback; a final public-site check received its first clock in 3.92 seconds and completed seeking in 0.56 seconds. These selected observations do not guarantee network performance.
+
+The current replay-transfer and schema-module release passed all eight local gates: 1,411 tests passed, one skip and zero failures. A live Azure shot-ranking/outcome regression passed independent source checks in 8.42 seconds of server processing, using three model calls and no repairs. This fixes replay transport overhead; model generation can still take several seconds.
 
 See [the compact evidence record](docs/EVALUATION_EVIDENCE.json), [submission status](docs/SUBMISSION.md) and [research](docs/RESEARCH.md). AI interpretation remains fallible, and unavailable intentions, pressing causes or chance quality must not be invented. The short passages do not establish a full-match player award or future winner. Azure availability depends on the configured account, quota and credit. The public source is available at [falcon-0/infinite-stadium](https://github.com/falcon-0/infinite-stadium), whose default branch is `codex/submission-release`. The approved demo is uploaded and linked on the hackathon project page; judge-access delivery and judging-period provider continuity remain unresolved.
 
