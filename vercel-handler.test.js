@@ -111,3 +111,57 @@ test('two serverless instances accept shared cookies, trusted aliases and alread
   );
   assert.equal(revoked.authRequired, true);
 });
+
+test('serverless question failure diagnostics include parsed-body wrapper timing without private request data', async (t) => {
+  const redis = memoryRedis(),
+    records = [],
+    secret = 'PRIVATE_BODY_AND_MODEL_DETAILS';
+  const runtime = {
+    ...env,
+    UPSTASH_REDIS_REST_URL: 'https://test-redis.upstash.io',
+    UPSTASH_REDIS_REST_TOKEN: 'test-only-storage-token',
+  };
+  const base = await start(
+    t,
+    createVercelHandler({
+      env: runtime,
+      storeFetcher: redis.fetcher,
+      questionFailureLogger: (record) => records.push(record),
+      fetcher: async () => {
+        throw new Error(secret);
+      },
+    }),
+    true,
+  );
+  const response = await fetch(base + '/api/agent/question', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.APP_ACCESS_TOKEN}`,
+      Origin: 'https://stadium.example',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      kind: 'sustained',
+      seed: 17,
+      time: 80,
+      language: 'en',
+      question: "Describe the buildup before Reed's shot at 01:14",
+    }),
+  });
+  assert.equal(response.status, 502);
+  assert.equal(records.length, 1);
+  const timings = records[0].timings;
+  assert.ok(timings.wrapperMs >= timings.handlerMs);
+  assert.ok(timings.wrapperBodyMs >= 0);
+  assert.ok(timings.requestBodyMs >= 0);
+  assert.equal(
+    timings.runtimeInitMs,
+    null,
+    'A handler factory created before the request is not cold-init work on this request',
+  );
+  assert.equal(records[0].requestId, response.headers.get('x-request-id'));
+  assert.doesNotMatch(
+    JSON.stringify(records),
+    /PRIVATE_|fake-test-key|private-test-access-token|test-only-storage-token|Reed/,
+  );
+});

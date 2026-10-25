@@ -3,11 +3,13 @@ import { serverSettings } from './server-settings.js';
 import { createSharedRuntimeStore } from './shared-runtime-store.js';
 import { GenerationError } from './ai.js';
 import { Readable } from 'node:stream';
+import { beginQuestionTiming, endQuestionTiming } from './question-diagnostics.js';
 
 export function createVercelHandler({
   env = process.env,
   fetcher = fetch,
   storeFetcher = fetch,
+  questionFailureLogger,
 } = {}) {
   const hostname = env.VERCEL_PROJECT_PRODUCTION_URL || env.VERCEL_URL;
   const runtime = {
@@ -53,9 +55,17 @@ export function createVercelHandler({
       };
   // No listener is opened: Vercel owns the socket. The same application routes
   // and asset allowlist are retained, including the streaming match endpoint.
-  const server = createServer({ env: runtime, fetcher, sharedBudget, sharedAccess });
+  const server = createServer({
+    env: runtime,
+    fetcher,
+    sharedBudget,
+    sharedAccess,
+    questionFailureLogger,
+  });
   const listener = server.listeners('request')[0];
   return async (req, res) => {
+    beginQuestionTiming(res, 'wrapper');
+    beginQuestionTiming(res, 'wrapperBody');
     // Vercel may have parsed the body already. Preserve the ordinary raw-stream
     // path too, so the application's existing size/content checks still apply.
     let request = req;
@@ -75,6 +85,7 @@ export function createVercelHandler({
         socket: req.socket,
       });
     }
+    endQuestionTiming(res, 'wrapperBody');
     return new Promise((resolve, reject) => {
       res.once('finish', resolve);
       res.once('close', resolve);
@@ -84,8 +95,13 @@ export function createVercelHandler({
 }
 let handler;
 export default function vercelHandler(req, res) {
+  beginQuestionTiming(res, 'wrapper');
   try {
-    handler ??= createVercelHandler();
+    if (!handler) {
+      beginQuestionTiming(res, 'runtimeInit');
+      handler = createVercelHandler();
+      endQuestionTiming(res, 'runtimeInit');
+    }
     return handler(req, res);
   } catch {
     res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

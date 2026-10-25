@@ -1,4 +1,11 @@
 import { createStreamCadence } from './stream-cadence.js';
+import { randomUUID } from 'node:crypto';
+import {
+  createQuestionDiagnostics,
+  beginQuestionTiming,
+  endQuestionTiming,
+  questionTimingSegments,
+} from './question-diagnostics.js';
 import http from 'node:http';
 import { performance } from 'node:perf_hooks';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -109,6 +116,7 @@ export function createServer({
   localStatusReader = localStatus,
   sharedBudget,
   sharedAccess,
+  questionFailureLogger = (summary) => console.error(JSON.stringify(summary)),
 } = {}) {
   const settings = serverSettings(env),
     filename = budgetFilename(env.MODEL_BUDGET_FILE);
@@ -160,6 +168,7 @@ export function createServer({
   };
   const server = http.createServer(async (req, res) => {
     handlerStarts.set(res, performance.now());
+    beginQuestionTiming(res, 'handler');
     try {
       let requestURL;
       try {
@@ -169,6 +178,11 @@ export function createServer({
         return;
       }
       const path = requestURL.pathname;
+      const questionDiagnostics =
+        path === '/api/agent/question' && req.method === 'POST'
+          ? createQuestionDiagnostics(randomUUID())
+          : null;
+      if (questionDiagnostics) res.setHeader('X-Request-Id', questionDiagnostics.requestId);
       if (
         path === '/' &&
         req.method === 'GET' &&
@@ -605,6 +619,7 @@ export function createServer({
         let ownsGeneration = false;
         try {
           let body = '';
+          if (questionDiagnostics) beginQuestionTiming(res, 'requestBody');
           for await (const chunk of req) {
             body += chunk;
             if (Buffer.byteLength(body) > (path === '/api/agent/question' ? 8192 : 4096))
@@ -616,6 +631,7 @@ export function createServer({
           } catch {
             throw new GenerationError('Invalid JSON request.', 400);
           }
+          if (questionDiagnostics) endQuestionTiming(res, 'requestBody');
           if (generating)
             throw new GenerationError(
               'Another draft is generating. Please wait.',
@@ -673,6 +689,7 @@ export function createServer({
                 200,
                 await answerMatchQuestionAI(input, {
                   ...options,
+                  onDiagnostic: (event) => questionDiagnostics?.record(event),
                   canRepair: async (required = 2) => {
                     const remaining = await budget.snapshot();
                     return remaining.limit - remaining.calls >= required;
@@ -691,6 +708,19 @@ export function createServer({
             res.removeListener('close', cancel);
           }
         } catch (error) {
+          if (questionDiagnostics) {
+            endQuestionTiming(res, 'requestBody');
+            try {
+              questionFailureLogger({
+                ...questionDiagnostics.failure(
+                  error,
+                  error instanceof GenerationError ? error.status : 500,
+                  performance.now() - handlerStarts.get(res),
+                ),
+                timings: questionTimingSegments(res),
+              });
+            } catch {}
+          }
           json(res, error instanceof GenerationError ? error.status : 500, {
             error: error instanceof GenerationError ? error.message : 'Unable to generate a draft.',
             ...(error instanceof GenerationError && error.code ? { code: error.code } : {}),
