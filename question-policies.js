@@ -29,7 +29,10 @@ export const sourceAttributePolicy = [
   'event, query, quantity and whole-question coverage checks govern those requests. Do not turn an ',
   'action word or anchor restriction into an additional attribute obligation. For a collecting ',
   'goalkeeper use event/playerId/goalkeeper/saved-shot-hold and retrieve the explicit current ',
-  'hold-to-saved-shot link. For roster fields use roster with actorRole none and linkage none. For ',
+  'hold-to-saved-shot link. If another event bounds the requested collection, retrieve that ',
+  'anchor separately and use a before/after relativeTo lookup. The saved-shot link proves the ',
+  'collector role only; it does not establish a relation to a different goal or pass. Keep ',
+  'independent actors independent. For roster fields use roster with actorRole none and linkage none. For ',
   'a pure roster-attribute question, the writer may choose unavailable-roster-attribute with the ',
   'exact request component and the absent source field, even if the planner missed the attribute. ',
   'This uses the source inventory and no match-event facts. An absent roster attribute requires a ',
@@ -356,6 +359,12 @@ export const exclusivePlanningPolicy = [
 ].join('');
 
 export const canonicalSelectionPolicy = [
+  'For a before/after question, a role-specific fact such as linked-goalkeeper-hold identifies ',
+  'the actor and linked shot only. Unless an executed requested-moment relation already keeps ',
+  'the exact anchor internal, also select the matching ordered-event anchor fact from the ',
+  'catalogue so the independent reviewer can verify the temporal relation. An anchor query ',
+  'alone is not a displayed anchor claim. Do not substitute a generic ranking or invent a ',
+  'timestamp. If the catalogue lacks the required anchor, do not claim the relation. ',
   'Default requestedSourceAttributes to null. A turnover, interception, recovery or ball win is ',
   'not a goalkeeper request. Only populate this field when the user actually requests a saved-shot ',
   'collecting goalkeeper or a roster field. requestedSourceAttributes is limited to explicit ',
