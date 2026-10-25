@@ -7,6 +7,7 @@ import {
   RECOVERY_KINDS,
 } from './recovery-classification.js';
 import { linkedGoalStory } from './linked-goal-story.js';
+import { linkedObservedShotStory } from './linked-observed-shot-story.js';
 import { isSafePlayerName } from './viewer-preferences.js';
 
 const version = 'question-facts-v1';
@@ -1739,7 +1740,16 @@ export function buildQuestionFacts(packet) {
       fr: `${supplier.name} a servi ${shooter.name} par une passe réussie à ${clock(pass.row.time)}. Le tir ${outcome} à ${clock(shot.row.time)} : cette passe n’a donc pas donné lieu à une passe décisive sur un but.`,
       pt: `${supplier.name} serviu ${shooter.name} com um passe completo aos ${clock(pass.row.time)}. O remate ${outcome} aos ${clock(shot.row.time)}, pelo que o passe não originou uma assistência para golo.`,
     }[language];
-    const id = add(text, [pass.ref, shot.ref], {
+    const observedStory =
+      packet.requestedForm === 'explanation' && packet.explanationTarget === 'observed-sequence'
+        ? linkedObservedShotStory(shot, eventFacts, {
+            observedAt: now,
+            language,
+            name: (id) => player(id)?.name,
+            clock,
+          })
+        : null;
+    const id = add(observedStory?.text || text, observedStory?.evidence || [pass.ref, shot.ref], {
       kind: 'linked-shot-supply',
       eventType: 'shot',
       eventId: shot.row.id,
@@ -1752,6 +1762,12 @@ export function buildQuestionFacts(packet) {
       actionOutcome: shot.proof.actionOutcome,
       assistBasis: 'confirmed-non-goal-shot',
       modelGenerated: false,
+      ...(observedStory
+        ? {
+            sequenceBasis: 'explicit-recovery-pass-reception-shot',
+            sequenceLinks: observedStory.links,
+          }
+        : {}),
     });
     // The explicit source link and settled outcome are derived observations.
     // Model-authored judgments remain separate interpretation claims.

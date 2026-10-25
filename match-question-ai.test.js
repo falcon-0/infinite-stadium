@@ -34,6 +34,7 @@ import {
   canonicalRequestedEventOutcome,
   unsupportedGoalEndpointClaims,
   explicitNamedShotStatus,
+  explicitNamedShotAnchor,
   bindExplicitTemporalEndpoints,
   projectWriterFactCatalog,
   maximumQuestionModelCalls,
@@ -20860,4 +20861,328 @@ test('a neutral French zero count reaches independent review without a redundant
       name,
     );
   }
+});
+
+for (const [language, question] of [
+  ['fr', 'Comment l’action s’est-elle construite avant le tir de Reed à 01:14 ?'],
+  ['en', "How did the action develop before Reed's shot at 01:14?"],
+]) {
+  test(`clock-bound observed sequence selects the exact endpoint with an exclusive predecessor window (${language})`, async () => {
+    const input = { kind: 'sustained', seed: 17, time: 80, language, question };
+    const state = matchState(input);
+    const endpoint = state.events.find((e) => e.type === 'shot' && e.time === 74);
+    assert.ok(endpoint);
+    let reviewed = false;
+    const mock = sequenceTransport([
+      {
+        answerFocus: 'event-sequence',
+        explanationTarget: 'observed-sequence',
+        requestedForm: 'explanation',
+        mentionedPlayers: ['A. Reed'],
+        decision: {
+          kind: 'queries',
+          queries: [
+            {
+              filters: {},
+              aggregate: 'list',
+              order: 'asc',
+              limit: 20,
+              timeFrom: 0,
+              timeTo: 74,
+              timeToExclusive: true,
+            },
+          ],
+        },
+      },
+      (packet, body) => {
+        const stories = packet.matchFacts.facts.filter((f) =>
+          ['linked-shot-supply', 'linked-goal-sequence'].includes(f.selection.kind),
+        );
+        assert.equal(
+          stories.length,
+          1,
+          'Earlier linked shots must not be offered as the requested buildup',
+        );
+        assert.match(stories[0].text || JSON.stringify(stories[0]), /01:14/);
+        assert.ok(
+          packet.requestedEvidence.some(
+            (s) => s.query.timeTo === 74 && s.query.timeToExclusive === true,
+          ),
+        );
+        const schema = resolvedWireSchema(body);
+        assert.equal(
+          schema.properties.composition.anyOf.length,
+          1,
+          'A single explicit endpoint buildup needs only its canonical story, not unrelated global facts or repeated prose',
+        );
+        const facts = schema.properties.composition.anyOf.find((m) =>
+          m.properties.mode.enum.includes('facts'),
+        );
+        assert.deepEqual(facts.properties.factIds.items.enum, [stories[0].id]);
+        assert.equal(facts.properties.factIds.minItems, 1);
+        assert.equal(facts.properties.factIds.maxItems, 1);
+        assert.deepEqual(Object.keys(facts.properties).sort(), ['factIds', 'mode']);
+        return {
+          scope: 'match',
+          composition: { mode: 'facts', factIds: [stories[0].id] },
+          followUp: '',
+        };
+      },
+      (packet) => {
+        reviewed = true;
+        return {
+          decision: 'approve',
+          requestCheck: {
+            status: 'answered',
+            requestedInformation: question,
+            coverage: packet.requestComponents.map((requestSpan) => ({
+              requestSpan,
+              claimIndices: [0],
+              answerForm: 'explanation',
+              requestedAction: 'other',
+              temporalRelation: 'before-requested-event',
+              relationAnchorClaimIndex: 0,
+              relationEntityBinding: 'same-team',
+              relationSourceLinkIndex: null,
+              explanationTarget: 'observed-sequence',
+            })),
+          },
+        };
+      },
+    ]);
+    const result = await answerMatchQuestionAI(input, { config, fetcher: mock.fetcher });
+    assert.equal(result.execution.modelCalls, 3);
+    assert.equal(reviewed, true, 'A source-proved sequence still requires independent review');
+    assert.equal(result.canonicalFactSelection.proofs[0].eventId, endpoint.id);
+    assert.equal(result.canonicalFactSelection.proofs[0].revision, endpoint.revision);
+    assert.equal(
+      result.canonicalFactSelection.proofs[0].sequenceBasis,
+      'explicit-recovery-pass-reception-shot',
+    );
+    assert.deepEqual(
+      result.claims[0].evidence.map((ref) => [ref.id.split('-').slice(-2).join('-'), ref.revision]),
+      [
+        ['recovery-66', 1],
+        ['pass-68', 2],
+        ['receive-72', 1],
+        ['shot-74', 1],
+      ],
+    );
+    const binding = result.queryRelations.find(
+      (binding) => binding.anchor.id === endpoint.id && binding.relation === 'before',
+    );
+    assert.equal(binding.anchor.revision, endpoint.revision);
+    assert.equal(binding.anchorIdentifiedBy, 'requested-moment');
+    assert.equal(binding.sameTeam, true);
+    assert.equal(binding.query.filters.id, endpoint.passId);
+    assert.equal(binding.query.timeTo, endpoint.time);
+    assert.equal(binding.query.timeToExclusive, true);
+    assert.ok(binding.resultEvents.some((ref) => ref.id === endpoint.passId));
+    const queryInput = { kind: input.kind, seed: input.seed, time: input.time };
+    const sources = [
+      executeMatchQuery(queryInput, { filters: { id: endpoint.id }, aggregate: 'list', limit: 1 }),
+      executeMatchQuery(queryInput, binding.query),
+    ];
+    const relationPacket = {
+      question,
+      observedAt: input.time,
+      requestedForm: 'explanation',
+      explanationTarget: 'observed-sequence',
+      roster: state.frames.at(-1).players,
+      teams: state.metadata.teams,
+      requestedMoment: { time: endpoint.time, reference: binding.anchor },
+      requestedEvidence: sources,
+      queryResults: sources,
+      queryRelations: [binding],
+    };
+    const relationReview = {
+      requestCheck: {
+        status: 'answered',
+        responseIntent: { purpose: 'explanation' },
+        coverage: [
+          {
+            requestSpan: requestComponents(question)[0],
+            claimIndices: [0],
+            answerForm: 'explanation',
+            explanationTarget: 'observed-sequence',
+            requestedAction: 'other',
+            temporalRelation: 'before-requested-event',
+            relationAnchorClaimIndex: 0,
+            relationEntityBinding: 'same-team',
+          },
+        ],
+      },
+    };
+    const relationIssues = (bindings, packet = relationPacket) =>
+      reviewRequestAdequacy(
+        relationReview,
+        result,
+        { ...packet, queryRelations: bindings },
+        { canonicalFactSelection: result.canonicalFactSelection },
+      ).filter((issue) => /identified anchor/.test(issue.reason));
+    assert.deepEqual(relationIssues([binding]), []);
+    for (const bad of [
+      [],
+      [{ ...binding, relation: 'after' }],
+      [{ ...binding, sameTeam: false }],
+      [{ ...binding, anchor: { ...binding.anchor, revision: binding.anchor.revision + 1 } }],
+      [
+        {
+          ...binding,
+          resultEvents: [],
+          scopeReference: { type: 'scope', id: 'wrong', revision: 1 },
+        },
+      ],
+    ])
+      assert.equal(relationIssues(bad).length, 1);
+    assert.match(result.answer, /01:08/);
+    assert.match(result.answer, /01:14/);
+    assert.match(result.answer, /01:06/);
+    assert.match(result.answer, /01:12/);
+    assert.doesNotMatch(result.answer, /00:10|00:14|00:16/);
+  });
+}
+
+test('explicit named shot clocks do not substitute another actor, time, revision or unreceived event', () => {
+  const input = {
+    kind: 'sustained',
+    seed: 17,
+    time: 80,
+    question: "Describe the buildup before Reed's shot at 01:14",
+  };
+  const state = matchState(input),
+    roster = state.frames.at(-1).players;
+  const shot = explicitNamedShotAnchor(input, roster, state.events);
+  assert.ok(shot && shot.time === 74);
+  for (const question of [
+    "Describe Cole's shot at 01:14",
+    "Describe Reed's shot at 01:13",
+    'Describe the shot at 01:14',
+  ])
+    assert.equal(explicitNamedShotAnchor({ ...input, question }, roster, state.events), null);
+  for (const event of [
+    { ...shot, arrivedAt: 81 },
+    { ...shot, operation: 'delete' },
+    { ...shot, time: 75 },
+  ])
+    assert.equal(explicitNamedShotAnchor(input, roster, [event]), null);
+  assert.equal(
+    explicitNamedShotAnchor(input, roster, [shot, { ...shot, revision: shot.revision + 1 }]),
+    null,
+    'Conflicting revisions must not license a sequence',
+  );
+});
+
+test('a clock-bound sequence rejects a writer selection for an earlier shot without normalization', async () => {
+  const input = {
+    kind: 'sustained',
+    seed: 17,
+    time: 80,
+    language: 'en',
+    question: "How did the action develop before Reed's shot at 01:14?",
+  };
+  // This is the actual earlier source-linked story that the original writer
+  // selected. Its validity for another shot must not license this question.
+  const state = matchState(input);
+  const source = executeMatchQuery(
+    { kind: input.kind, seed: input.seed, time: input.time },
+    { filters: {}, aggregate: 'list', limit: 20, timeFrom: 0, timeTo: 74, timeToExclusive: true },
+  );
+  const manifest = buildQuestionFacts({
+    question: input.question,
+    roster: state.frames.at(-1).players,
+    teams: state.metadata.teams,
+    observedAt: 80,
+    queryResults: [source],
+    requestedEvidence: [source],
+  });
+  const wrong = manifest.facts.find(
+    (f) => f.proof.kind === 'linked-shot-supply' && f.proof.time === 16,
+  );
+  assert.ok(wrong);
+  const draft = {
+    scope: 'match',
+    composition: { mode: 'facts', factIds: [wrong.id] },
+    followUp: '',
+  };
+  const mock = sequenceTransport([
+    {
+      answerFocus: 'event-sequence',
+      explanationTarget: 'observed-sequence',
+      requestedForm: 'explanation',
+      mentionedPlayers: ['A. Reed'],
+      decision: {
+        kind: 'queries',
+        queries: [
+          {
+            filters: {},
+            aggregate: 'list',
+            limit: 20,
+            timeFrom: 0,
+            timeTo: 74,
+            timeToExclusive: true,
+          },
+        ],
+      },
+    },
+    draft,
+    draft,
+  ]);
+  await assert.rejects(
+    answerMatchQuestionAI(input, { config, fetcher: mock.fetcher }),
+    (error) => error.code === 'question-invalid-fact-selection',
+  );
+  assert.equal(mock.count(), 2);
+});
+
+test('a bare clock team buildup keeps source-scoped sequence facts without inventing a named-shot endpoint', async () => {
+  const input = {
+    kind: 'sustained',
+    seed: 17,
+    time: 80,
+    language: 'en',
+    question: 'How did Northbridge build the action after 01:00?',
+  };
+  const mock = sequenceTransport([
+    {
+      answerFocus: 'event-sequence',
+      explanationTarget: 'observed-sequence',
+      requestedForm: 'explanation',
+      mentionedPlayers: [],
+      decision: {
+        kind: 'queries',
+        queries: [
+          {
+            filters: { team: 'home' },
+            aggregate: 'list',
+            order: 'asc',
+            limit: 20,
+            timeFrom: 60,
+            timeTo: 80,
+            timeFromExclusive: true,
+            timeToExclusive: false,
+          },
+        ],
+      },
+    },
+    (packet, body) => {
+      const story = packet.matchFacts.facts.find((f) => f.selection.kind === 'linked-shot-supply');
+      assert.ok(story, 'A window clock alone must not remove otherwise verified buildup stories');
+      assert.ok(
+        resolvedWireSchema(body).properties.composition.anyOf.length > 1,
+        'Team buildup windows retain their broader composition choices',
+      );
+      assert.ok(
+        !packet.queryRelations?.some(
+          (binding) => binding.anchorIdentifiedBy === 'requested-moment',
+        ),
+      );
+      return { scope: 'match', composition: { mode: 'facts', factIds: [story.id] }, followUp: '' };
+    },
+    { decision: 'approve' },
+  ]);
+  const result = await answerMatchQuestionAI(input, { config, fetcher: mock.fetcher });
+  assert.equal(result.execution.modelCalls, 3);
+  assert.match(result.answer, /01:14/);
+  assert.match(result.answer, /01:08/);
 });

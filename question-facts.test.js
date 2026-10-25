@@ -3048,3 +3048,85 @@ test('legacy named roster data supports canonical goal identity without a raw-pr
   assert.equal(goal.proof.event.playerId, 'home-10');
   assert.equal(goal.proof.event.modelGenerated, false);
 });
+
+test('observed sequence explanation renders the complete linked buildup while supplier facts keep assist distinctions', () => {
+  const input = { kind: 'sustained', seed: 17, time: 80 },
+    state = matchState(input);
+  for (const language of ['en', 'es', 'fr', 'pt']) {
+    const base = {
+      observedAt: 80,
+      roster: state.frames.at(-1).players,
+      teams: state.metadata.teams,
+      responseLanguage: language,
+      linkedContext: { rows: structuredClone(state.events) },
+    };
+    const find = (packet) =>
+      buildQuestionFacts(packet).facts.find(
+        (f) => f.proof.kind === 'linked-shot-supply' && f.proof.time === 74,
+      );
+    const story = find({
+      ...base,
+      requestedForm: 'explanation',
+      explanationTarget: 'observed-sequence',
+    });
+    assert.equal(story.proof.sequenceBasis, 'explicit-recovery-pass-reception-shot');
+    assert.deepEqual(
+      story.claim.evidence.map((ref) => [ref.id.split('-').slice(-2).join('-'), ref.revision]),
+      [
+        ['recovery-66', 1],
+        ['pass-68', 2],
+        ['receive-72', 1],
+        ['shot-74', 1],
+      ],
+    );
+    for (const clock of ['01:06', '01:08', '01:12', '01:14'])
+      assert.match(story.claim.text, new RegExp(clock));
+    assert.doesNotMatch(story.claim.text, /00:10|00:14|assist|décisive|assistência/i);
+    const supplier = find({ ...base, requestedForm: 'fact', explanationTarget: 'none' });
+    assert.equal(supplier.claim.evidence.length, 2);
+    assert.equal(supplier.proof.sequenceBasis, undefined);
+    assert.doesNotMatch(supplier.claim.text, /01:06|01:12/);
+  }
+  for (const change of [
+    (rows) =>
+      rows.push({
+        ...rows.find((r) => r.type === 'recovery' && r.time === 66),
+        revision: 2,
+        operation: 'delete',
+        arrivedAt: 80,
+      }),
+    (rows) =>
+      rows.push({
+        ...rows.find((r) => r.type === 'receive' && r.time === 72),
+        revision: 2,
+        playerId: 'home-9',
+        arrivedAt: 80,
+      }),
+    (rows) =>
+      rows.push({
+        ...rows.find((r) => r.type === 'receive' && r.time === 72),
+        id: 'ambiguous-reception',
+      }),
+  ]) {
+    const rows = structuredClone(state.events);
+    change(rows);
+    const manifest = buildQuestionFacts({
+      observedAt: 80,
+      roster: state.frames.at(-1).players,
+      teams: state.metadata.teams,
+      linkedContext: { rows },
+      requestedForm: 'explanation',
+      explanationTarget: 'observed-sequence',
+    });
+    const story = manifest.facts.find(
+      (f) => f.proof.kind === 'linked-shot-supply' && f.proof.time === 74,
+    );
+    assert.ok(story);
+    assert.equal(
+      story.proof.sequenceBasis,
+      undefined,
+      'Invalid current full chains must never render the recovery/reception narrative',
+    );
+    assert.equal(story.claim.evidence.length, 2);
+  }
+});
