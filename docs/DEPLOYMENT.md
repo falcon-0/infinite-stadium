@@ -20,6 +20,8 @@ Loopback is the default. Public server binding requires the access token, allowe
 
 The daily guard counts model-call reservations, not Azure dollars. A timeout, provider quota or expired subscription can still prevent an answer. Never reset the ledger to bypass the guard. No automatic paid upgrade is part of deployment.
 
+Replay events negotiate gzip in `stream-transport.js` and flush each event immediately. Clients that do not accept gzip retain the same event data without compression. Selected hosted checks confirm smaller transfers and advancing playback; model generation and network conditions still determine total answer latency.
+
 ## Portable hosting
 
 The Node server can run behind another HTTPS host. Docker is optional packaging, not a requirement for the product. The Docker image uses a non-root Node user; persistent local budget storage needs a writable mounted `.runtime` directory. A serverless host needs shared storage rather than an ephemeral disk ledger.
@@ -30,4 +32,4 @@ Optional local-provider adapters remain experimental and are not certified repla
 
 Build from an explicitly selected tested snapshot. Run all eight release gates and verify source, distribution, archive and extracted-package identities. After deployment check served assets, signed-out access, a successful authorized question, preference application and the model-unavailable state. Keep first failures separate from retunes.
 
-The accepted Watch interface retains the Montserrat font. The readable source and multilingual clarification fixes were merged into the public repository after local release gates, hosted Azure checks and independent Linux, Windows and browser CI passed. A real browser check verifies that a delayed identity reply retains the original evidence timestamp while playback continues. These selected checks do not establish universal answer reliability or latency. The final approved video and Azure expiry, credit and quota through judging still require confirmation. Private deployment receipts and test captures stay outside the published source.
+The accepted Watch interface retains the Montserrat font. The readable source and multilingual clarification fixes were merged into the public repository after local release gates, hosted Azure checks and independent Linux, Windows and browser CI passed. A real browser check verifies that a delayed identity reply retains the original evidence timestamp while playback continues. These selected checks do not establish universal answer reliability or latency. The approved 118-second demo is uploaded and linked in the project description. The current Azure trial expires on November 4, before judging ends on November 10; an owner-managed account switch or paid continuation still needs verification. No account upgrade is automatic. Private deployment receipts and test captures stay outside the published source.

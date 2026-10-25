@@ -1,12 +1,13 @@
 {
-  "schema": "infinite-stadium.public-evaluation-summary.v3",
+  "schema": "infinite-stadium.public-evaluation-summary.v4",
   "status": "Selected development evidence, not submission certification or organizer judging",
   "currentRelease": {
-    "name": "R14",
-    "date": "2026-10-22",
+    "name": "October 25 replay transport and schema modules",
+    "date": "2026-10-25",
+    "sourceCommit": "189a1064cc842a01b05871d8d9efe604169b0516",
     "production": {
-      "id": "dpl_68EAHziTRsKc4FtqfRjUJHYFm6pP",
-      "url": "https://infinite-stadium-oslc54i38-falcon-266e.vercel.app",
+      "id": "dpl_GCENbA4wsZbwvZzh8NWDrPsCxdDH",
+      "url": "https://infinite-stadium-4289uo435-falcon-266e.vercel.app",
       "productionUrl": "https://infinite-stadium-lime.vercel.app",
       "readyState": "READY"
     },
@@ -14,142 +15,251 @@
       "passed": true,
       "allEightGates": true,
       "fullTests": {
-        "tests": 1352,
-        "pass": 1351,
+        "tests": 1412,
+        "pass": 1411,
         "fail": 0,
         "skipped": 1
+      },
+      "githubChecksPassed": 6
+    },
+    "transportComparison": {
+      "scope": "Controlled staging HTTP/2 identity, gzip, gzip, identity; one selected first event, zero model calls. Not a population latency estimate.",
+      "identityFirstEventMs": [
+        1528.0561,
+        1607.9155
+      ],
+      "gzipFirstEventMs": [
+        475.2217,
+        468.0807
+      ],
+      "gzipFirstEventWireBytes": 30882,
+      "decodedFirstEventBytes": 224639,
+      "allDecodedFirstFramesIdentical": true
+    },
+    "hostedBrowser": {
+      "scope": "Two staging Watch runs and one public production Watch run; no model calls.",
+      "stagingSeekApproxMs": [
+        632,
+        657
+      ],
+      "stagingHealthApproxMs": [
+        305,
+        287
+      ],
+      "publicFirstReceivedClockMs": 3920,
+      "publicSeekMs": 558,
+      "publicPlaybackAdvanced": true,
+      "pageErrors": []
+    },
+    "azureRegression": {
+      "scope": "One selected development regression, not an unfamiliar-question benchmark. Independently checked against received fixture events.",
+      "input": {
+        "kind": "sustained",
+        "seed": 17,
+        "time": 80,
+        "question": "Who’s had the most shots so far, and how did they turn out?",
+        "language": "en",
+        "conversation": [],
+        "audience": "newcomer",
+        "favoriteClub": null,
+        "favoritePlayer": null
+      },
+      "answer": "Both teams combined: A. Reed leads with 2 shots. A. Reed has a shot blocked at 01:14. Club: Northbridge. A. Reed shoots off target at 00:16. Club: Northbridge.",
+      "accepted": true,
+      "serverElapsedMs": 8423,
+      "browserApiElapsedMs": 8773,
+      "modelCalls": 3,
+      "repairs": 0,
+      "expected": {
+        "observedAt": 80,
+        "leaders": [
+          "A. Reed"
+        ],
+        "count": 2,
+        "outcomes": [
+          {
+            "id": "comparison-sustained-17-shot-16",
+            "revision": 1,
+            "player": "A. Reed",
+            "time": 16,
+            "outcome": "off-target"
+          },
+          {
+            "id": "comparison-sustained-17-shot-74",
+            "revision": 1,
+            "player": "A. Reed",
+            "time": 74,
+            "outcome": "blocked"
+          }
+        ]
       }
     },
-    "hostedRegression": {
-      "scope": "Six selected developer retune regressions, not overall accuracy or controlled latency comparison. First failures retained separately.",
-      "accepted": true,
-      "cases": [
-        {
-          "id": "fresh-french-recipient-and-failures",
-          "input": {
+    "uiScope": "Current Watch interface and font unchanged. Schema extraction changes code ownership, not answer policy."
+  },
+  "previousReleases": [
+    {
+      "name": "October 22 selected regression release",
+      "date": "2026-10-22",
+      "production": {
+        "id": "dpl_68EAHziTRsKc4FtqfRjUJHYFm6pP",
+        "url": "https://infinite-stadium-oslc54i38-falcon-266e.vercel.app",
+        "productionUrl": "https://infinite-stadium-lime.vercel.app",
+        "readyState": "READY"
+      },
+      "releaseChecks": {
+        "passed": true,
+        "allEightGates": true,
+        "fullTests": {
+          "tests": 1352,
+          "pass": 1351,
+          "fail": 0,
+          "skipped": 1
+        }
+      },
+      "hostedRegression": {
+        "scope": "Six selected developer retune regressions, not overall accuracy or controlled latency comparison. First failures retained separately.",
+        "accepted": true,
+        "cases": [
+          {
+            "id": "fresh-french-recipient-and-failures",
+            "input": {
+              "kind": "sustained",
+              "seed": 17,
+              "time": 120,
+              "language": "fr",
+              "question": "À qui Cole a-t-il donné son dernier ballon réussi, et combien de passes a-t-il ratées depuis le début ?",
+              "conversation": []
+            },
+            "answer": "Dernière tentative de passe pour J. Cole: J. Cole a réussi une passe à A. Reed à 01:50. Club : Northbridge. J. Cole totalise 0 passes manquées.",
+            "accepted": true,
+            "serverElapsedMs": 12302,
+            "modelCalls": 3,
+            "limitation": null
+          },
+          {
+            "id": "fresh-keeper-before-goal",
+            "input": {
+              "kind": "sustained",
+              "seed": 17,
+              "time": 120,
+              "language": "en",
+              "question": "Before Reed scored, had Carter already collected a saved shot, or was that later?",
+              "conversation": []
+            },
+            "answer": "M. Carter collected A. Reed's saved shot at 01:38; the shot was at 01:36. First confirmed goal for A. Reed: A. Reed scores at 01:56. Club: Northbridge.",
+            "accepted": true,
+            "serverElapsedMs": 11199,
+            "modelCalls": 3,
+            "limitation": null
+          },
+          {
+            "id": "keeper-save-or-miss",
+            "input": {
+              "kind": "sustained",
+              "seed": 17,
+              "time": 120,
+              "language": "en",
+              "question": "Has either keeper actually made a save, or did those shots just miss?",
+              "conversation": []
+            },
+            "answer": "Latest shot saved: M. Carter collected A. Reed's saved shot at 01:38; the shot was at 01:36. Both teams combined: M. Carter leads with 1 saved shot collected.",
+            "accepted": true,
+            "serverElapsedMs": 9228,
+            "modelCalls": 3,
+            "limitation": null
+          },
+          {
+            "id": "unknown-ranking-independent-goal",
+            "input": {
+              "kind": "central",
+              "seed": 17,
+              "time": 12,
+              "language": "en",
+              "question": "Who completed the longest pass, and who scored the goal?",
+              "conversation": []
+            },
+            "answer": "A. Reed scores at 00:08. Club: Northbridge. I can't establish which pass was longest or shortest with the match measurements available here.",
+            "accepted": true,
+            "serverElapsedMs": 12276,
+            "modelCalls": 3,
+            "limitation": "Pass-distance ranking unavailable; honest boundary plus independent scorer"
+          },
+          {
+            "id": "public-fixture-independent-goal",
+            "input": {
+              "kind": "sustained",
+              "seed": 17,
+              "time": 120,
+              "language": "en",
+              "question": "Who completed the longest pass, and who scored the goal?",
+              "conversation": []
+            },
+            "answer": "I can't establish which pass was longest or shortest with the match measurements available here. Latest confirmed goal: A. Reed scores at 01:56. Club: Northbridge.",
+            "accepted": true,
+            "serverElapsedMs": 11789,
+            "modelCalls": 3,
+            "limitation": "Pass-distance ranking unavailable; honest boundary plus independent scorer"
+          },
+          {
+            "id": "spanish-shot-share",
+            "input": {
+              "kind": "sustained",
+              "seed": 17,
+              "time": 120,
+              "language": "es",
+              "question": "De todos los tiros del partido, ¿qué porcentaje fue a puerta? No me repitas el marcador.",
+              "conversation": []
+            },
+            "answer": "Ambos equipos combinados: 40% (2 de 5 tiros a puerta).",
+            "accepted": true,
+            "serverElapsedMs": 6000,
+            "modelCalls": 2,
+            "limitation": null
+          }
+        ],
+        "signedOutStatus": 401,
+        "logoutStatus": 200
+      },
+      "browserCheck": {
+        "origin": "https://infinite-stadium-lime.vercel.app",
+        "scope": "Actual public UI and Azure calls in an isolated headless browser; no mocked model responses or owner-tab interaction.",
+        "requests": [
+          {
             "kind": "sustained",
             "seed": 17,
-            "time": 120,
-            "language": "fr",
+            "time": 106,
             "question": "À qui Cole a-t-il donné son dernier ballon réussi, et combien de passes a-t-il ratées depuis le début ?",
-            "conversation": []
-          },
-          "answer": "Dernière tentative de passe pour J. Cole: J. Cole a réussi une passe à A. Reed à 01:50. Club : Northbridge. J. Cole totalise 0 passes manquées.",
-          "accepted": true,
-          "serverElapsedMs": 12302,
-          "modelCalls": 3,
-          "limitation": null
-        },
-        {
-          "id": "fresh-keeper-before-goal",
-          "input": {
-            "kind": "sustained",
-            "seed": 17,
-            "time": 120,
-            "language": "en",
-            "question": "Before Reed scored, had Carter already collected a saved shot, or was that later?",
-            "conversation": []
-          },
-          "answer": "M. Carter collected A. Reed's saved shot at 01:38; the shot was at 01:36. First confirmed goal for A. Reed: A. Reed scores at 01:56. Club: Northbridge.",
-          "accepted": true,
-          "serverElapsedMs": 11199,
-          "modelCalls": 3,
-          "limitation": null
-        },
-        {
-          "id": "keeper-save-or-miss",
-          "input": {
-            "kind": "sustained",
-            "seed": 17,
-            "time": 120,
-            "language": "en",
-            "question": "Has either keeper actually made a save, or did those shots just miss?",
-            "conversation": []
-          },
-          "answer": "Latest shot saved: M. Carter collected A. Reed's saved shot at 01:38; the shot was at 01:36. Both teams combined: M. Carter leads with 1 saved shot collected.",
-          "accepted": true,
-          "serverElapsedMs": 9228,
-          "modelCalls": 3,
-          "limitation": null
-        },
-        {
-          "id": "unknown-ranking-independent-goal",
-          "input": {
-            "kind": "central",
-            "seed": 17,
-            "time": 12,
-            "language": "en",
-            "question": "Who completed the longest pass, and who scored the goal?",
-            "conversation": []
-          },
-          "answer": "A. Reed scores at 00:08. Club: Northbridge. I can't establish which pass was longest or shortest with the match measurements available here.",
-          "accepted": true,
-          "serverElapsedMs": 12276,
-          "modelCalls": 3,
-          "limitation": "Pass-distance ranking unavailable; honest boundary plus independent scorer"
-        },
-        {
-          "id": "public-fixture-independent-goal",
-          "input": {
-            "kind": "sustained",
-            "seed": 17,
-            "time": 120,
-            "language": "en",
-            "question": "Who completed the longest pass, and who scored the goal?",
-            "conversation": []
-          },
-          "answer": "I can't establish which pass was longest or shortest with the match measurements available here. Latest confirmed goal: A. Reed scores at 01:56. Club: Northbridge.",
-          "accepted": true,
-          "serverElapsedMs": 11789,
-          "modelCalls": 3,
-          "limitation": "Pass-distance ranking unavailable; honest boundary plus independent scorer"
-        },
-        {
-          "id": "spanish-shot-share",
-          "input": {
-            "kind": "sustained",
-            "seed": 17,
-            "time": 120,
-            "language": "es",
-            "question": "De todos los tiros del partido, ¿qué porcentaje fue a puerta? No me repitas el marcador.",
-            "conversation": []
-          },
-          "answer": "Ambos equipos combinados: 40% (2 de 5 tiros a puerta).",
-          "accepted": true,
-          "serverElapsedMs": 6000,
-          "modelCalls": 2,
-          "limitation": null
-        }
-      ],
-      "signedOutStatus": 401,
-      "logoutStatus": 200
-    },
-    "browserCheck": {
-      "origin": "https://infinite-stadium-lime.vercel.app",
-      "scope": "Actual public UI and Azure calls in an isolated headless browser; no mocked model responses or owner-tab interaction.",
-      "requests": [
-        {
-          "kind": "sustained",
-          "seed": 17,
-          "time": 106,
-          "question": "À qui Cole a-t-il donné son dernier ballon réussi, et combien de passes a-t-il ratées depuis le début ?",
-          "language": "fr",
-          "conversation": [],
-          "audience": "newcomer",
-          "favoriteClub": null,
-          "favoritePlayer": null
-        }
-      ],
-      "pageErrors": [],
-      "clockAfterAnswer": "02:00",
-      "passed": true,
-      "answer": "Dernière tentative de passe pour J. Cole: J. Cole a réussi une passe à A. Reed à 01:42. Club : Northbridge. J. Cole totalise 0 passes manquées.",
-      "answerEvidencePin": 106,
-      "modelCalls": 3,
-      "elapsedMs": 12842,
-      "logoutStatus": 200
-    },
-    "uiScope": "Accepted Watch layout, styles, pitch and chat UI byte-identical to the preceding production release. No redesign."
+            "language": "fr",
+            "conversation": [],
+            "audience": "newcomer",
+            "favoriteClub": null,
+            "favoritePlayer": null
+          }
+        ],
+        "pageErrors": [],
+        "clockAfterAnswer": "02:00",
+        "passed": true,
+        "answer": "Dernière tentative de passe pour J. Cole: J. Cole a réussi une passe à A. Reed à 01:42. Club : Northbridge. J. Cole totalise 0 passes manquées.",
+        "answerEvidencePin": 106,
+        "modelCalls": 3,
+        "elapsedMs": 12842,
+        "logoutStatus": 200
+      },
+      "uiScope": "Accepted Watch layout, styles, pitch and chat UI byte-identical to the preceding production release. No redesign."
+    }
+  ],
+  "delivery": {
+    "video": "https://youtu.be/Ay6WmVt-LIA",
+    "videoSeconds": 118,
+    "approved": true,
+    "visibility": "Unlisted",
+    "projectDescriptionVideoLinkSaved": true,
+    "finalSubmitActionClicked": false,
+    "portalFinalStatusConfirmed": false,
+    "privateJudgeAccessDeliveryResolved": false,
+    "currentAzureTrialExpires": "2026-11-04",
+    "judgingEnds": "2026-11-10",
+    "providerContinuitySecured": false
   },
   "limitations": [
     "These selected, retuned questions do not estimate unfamiliar-question accuracy or establish a controlled latency improvement.",
@@ -158,7 +268,7 @@
     "Unavailable pass-distance rankings, intentions and tactical causes must not be invented.",
     "Azure responses and latency depend on the configured account, quota, credit and network. Judging-period provider continuity remains unverified.",
     "The public browser check is one desktop journey, not broad device validation or representative fan research.",
-    "Final submission video approval and submission completeness remain separate delivery checks."
+    "The approved video is uploaded, but private judge access and final portal competition status remain separate delivery checks."
   ],
-  "reviewStatus": "Independent internal reviews are being refreshed; no new score is claimed by this record."
+  "reviewStatus": "No new organizer or internal score is claimed. No human fan study or comparative single-model evaluation was conducted."
 }
