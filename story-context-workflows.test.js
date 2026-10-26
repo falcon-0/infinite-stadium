@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { investigateFactStory } from './fact-workflow.js';
-import { investigateLocalFactStory } from './local-fact-workflow.js';
-
 const input = {
   source: 'integrated-match',
   kind: 'wide',
@@ -12,18 +10,37 @@ const input = {
   audience: 'analyst',
   language: 'en',
 };
-const config = { url: 'https://test.openai.azure.com', deployment: 'test', key: 'test' };
+const config = {
+  url: 'https://test.openai.azure.com',
+  deployment: 'test',
+  key: 'test',
+};
 const workerResult = (raw, tools = []) => ({
   raw,
   tools,
   modelCalls: 1,
   elapsedMs: 2,
   usageReportedCalls: 1,
-  usage: { promptTokens: 10, completionTokens: 5 },
-  trace: tools.map((name) => ({ type: 'function-tool', name })),
+  usage: {
+    promptTokens: 10,
+    completionTokens: 5,
+  },
+  trace: tools.map((name) => ({
+    type: 'function-tool',
+    name,
+  })),
 });
-const plan = (names) => workerResult({ tools: names }, names);
-const approve = workerResult({ decision: 'approve', issues: [] });
+const plan = (names) =>
+  workerResult(
+    {
+      tools: names,
+    },
+    names,
+  );
+const approve = workerResult({
+  decision: 'approve',
+  issues: [],
+});
 function worker(steps) {
   const packets = [];
   let calls = 0;
@@ -38,7 +55,10 @@ function worker(steps) {
     },
   };
 }
-const requiredOnly = (packet) => workerResult({ slots: packet.requiredSlots });
+const requiredOnly = (packet) =>
+  workerResult({
+    slots: packet.requiredSlots,
+  });
 function contextual(packet) {
   assert.equal(packet.contextRequirement.minimum, 1);
   assert.ok(packet.contextRequirement.candidateSlots.length);
@@ -49,16 +69,26 @@ function contextual(packet) {
   assert.equal(candidate.values.count, 1);
   assert.ok(packet.contextRequirement.candidateSlots.includes(candidate.slot));
   assert.ok(!packet.requiredSlots.includes(candidate.slot));
-  return workerResult({ slots: [...packet.requiredSlots, candidate.slot] });
+  return workerResult({
+    slots: [...packet.requiredSlots, candidate.slot],
+  });
 }
-const reply = (raw) => ({ finish_reason: 'stop', message: { content: JSON.stringify(raw) } });
+const reply = (raw) => ({
+  finish_reason: 'stop',
+  message: {
+    content: JSON.stringify(raw),
+  },
+});
 const toolReply = (names) => ({
   finish_reason: 'tool_calls',
   message: {
     tool_calls: names.map((name, i) => ({
       id: `tool-${i}`,
       type: 'function',
-      function: { name, arguments: '{}' },
+      function: {
+        name,
+        arguments: '{}',
+      },
     })),
   },
 });
@@ -75,7 +105,13 @@ function provider(steps) {
       const step = steps[calls++],
         value = typeof step === 'function' ? step(body) : step;
       return new Response(
-        JSON.stringify({ choices: [value], usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+        JSON.stringify({
+          choices: [value],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+          },
+        }),
       );
     },
   };
@@ -91,7 +127,10 @@ function catalogPacket(body) {
 const catalog = (body) => catalogPacket(body).catalog;
 const mandatory = (facts) =>
   facts.filter((f) => ['moment', 'goal-score-change'].includes(f.kind)).map((f) => f.id);
-const azureRequired = (body) => reply({ factIds: mandatory(catalog(body).facts) });
+const azureRequired = (body) =>
+  reply({
+    factIds: mandatory(catalog(body).facts),
+  });
 const azureContext = (body) => {
   const packet = catalogPacket(body),
     facts = packet.catalog.facts,
@@ -102,133 +141,33 @@ const azureContext = (body) => {
   assert.equal(candidate.values.count, 1);
   assert.equal(packet.contextRequirement.minimum, 1);
   assert.ok(packet.contextRequirement.candidateFactIds.includes(candidate.id));
-  return reply({ factIds: [...mandatory(facts), candidate.id] });
+  return reply({
+    factIds: [...mandatory(facts), candidate.id],
+  });
 };
-
-test('local analyst context omission repairs the raw selection once with current corrected pass evidence', async () => {
-  const mock = worker([
-    plan(['get_event_sequence', 'score_at_moment']),
-    requiredOnly,
-    contextual,
-    approve,
-  ]);
-  const draft = await investigateLocalFactStory(input, { runner: mock.runner });
-  assert.equal(draft.status, 'draft');
-  assert.equal(draft.execution.repairCount, 1);
-  assert.equal(mock.count(), 4);
-  assert.equal(mock.packets.filter((p) => p.mode === 'fact-editorial-review').length, 1);
-  const count = draft.selectedFacts.find((f) => f.kind === 'window-event-count');
-  assert.ok(count);
-  assert.deepEqual(count.evidence, [{ type: 'event', id: 'wide-902-pass', revision: 2 }]);
-  assert.deepEqual(draft.execution.modelSelectedTools, ['get_event_sequence', 'score_at_moment']);
-  assert.deepEqual(draft.execution.applicationRequiredTools, ['get_match_patterns']);
-  assert.equal(draft.execution.toolCalls, 3);
-  assert.equal(draft.selectedFacts[0].kind, 'moment');
-  assert.equal(draft.selectedFacts[1].kind, 'goal-score-change');
-  assert.deepEqual(draft.claims.at(-1).evidence, count.evidence);
-});
-
-test('repeated local context omission withholds before any reviewer can approve', async () => {
-  const mock = worker([
-    plan(['get_event_sequence', 'score_at_moment']),
-    requiredOnly,
-    requiredOnly,
-  ]);
-  const draft = await investigateLocalFactStory(input, { runner: mock.runner });
-  assert.equal(draft.status, 'withheld');
-  assert.deepEqual(draft.claims, []);
-  assert.deepEqual(draft.selectedFactIds, []);
-  assert.equal(draft.execution.repairCount, 1);
-  assert.equal(mock.count(), 3);
-  assert.equal(
-    mock.packets.some((p) => p.mode === 'fact-editorial-review'),
-    false,
-  );
-});
-
-test('newcomer retains two required goal facts and a genuinely empty analyst candidate set is not forced', async () => {
-  const simple = worker([plan(['get_event_sequence', 'score_at_moment']), requiredOnly, approve]);
-  const newcomer = await investigateLocalFactStory(
-    { ...input, audience: 'newcomer' },
-    { runner: simple.runner },
-  );
-  assert.equal(newcomer.status, 'draft');
-  assert.deepEqual(
-    newcomer.selectedFacts.map((f) => f.kind),
-    ['moment', 'goal-score-change'],
-  );
-  assert.equal(newcomer.execution.toolCalls, 2);
-  assert.equal(newcomer.execution.repairCount, 0);
-  const empty = worker([
-    plan(['get_event_sequence']),
-    (packet) => {
-      assert.equal(packet.contextRequirement.minimum, 0);
-      assert.deepEqual(packet.contextRequirement.candidateSlots, []);
-      return requiredOnly(packet);
-    },
-    approve,
-  ]);
-  const draft = await investigateLocalFactStory(
-    { ...input, time: 2, anchorId: 'wide-902-pass' },
-    { runner: empty.runner },
-  );
-  assert.equal(draft.status, 'draft');
-  assert.equal(draft.execution.repairCount, 0);
-  assert.deepEqual(
-    draft.selectedFacts.map((f) => f.kind),
-    ['moment'],
-  );
-});
-
-test('spatial measurement supplies exact corrected samples without repeating a model-selected foundation tool', async () => {
-  const mock = worker([
-    plan(['get_event_sequence', 'score_at_moment', 'measure_moment']),
-    (packet) => {
-      const candidate = packet.catalog.facts.find(
-        (f) => f.kind === 'player-sample-displacement-rate',
-      );
-      assert.ok(candidate);
-      assert.ok(packet.contextRequirement.candidateSlots.includes(candidate.slot));
-      return workerResult({ slots: [...packet.requiredSlots, candidate.slot] });
-    },
-    approve,
-  ]);
-  const draft = await investigateLocalFactStory(
-    { ...input, audience: 'spatial' },
-    { runner: mock.runner },
-  );
-  assert.equal(draft.status, 'draft');
-  assert.equal(draft.execution.toolCalls, 3);
-  assert.deepEqual(draft.execution.applicationRequiredTools, []);
-  const sample = draft.selectedFacts.at(-1);
-  assert.equal(sample.kind, 'player-sample-displacement-rate');
-  assert.ok(
-    sample.evidence.some(
-      (ref) => ref.type === 'frame' && ref.id === 'wide-902-frame-8' && ref.revision === 2,
-    ),
-  );
-  assert.ok(
-    sample.evidence.some(
-      (ref) => ref.type === 'frame' && ref.id === 'wide-902-frame-7' && ref.revision === 1,
-    ),
-  );
-  assert.ok(sample.evidence.some((ref) => ref.type === 'metric'));
-  assert.deepEqual(draft.claims.at(-1).evidence, sample.evidence);
-});
-
 test('Azure analyst omission is repaired only by a new model selection; repeated omission is withheld', async () => {
   const repaired = provider([
     toolReply(['get_event_sequence', 'score_at_moment']),
     azureRequired,
     azureContext,
-    reply({ decision: 'approve', issues: [] }),
+    reply({
+      decision: 'approve',
+      issues: [],
+    }),
   ]);
-  const draft = await investigateFactStory(input, { config, fetcher: repaired.fetcher });
+  const draft = await investigateFactStory(input, {
+    config,
+    fetcher: repaired.fetcher,
+  });
   assert.equal(draft.status, 'draft');
   assert.equal(draft.execution.repairCount, 1);
   assert.equal(repaired.count(), 4);
   assert.deepEqual(draft.selectedFacts.at(-1).evidence, [
-    { type: 'event', id: 'wide-902-pass', revision: 2 },
+    {
+      type: 'event',
+      id: 'wide-902-pass',
+      revision: 2,
+    },
   ]);
   assert.equal(draft.execution.toolCalls, 3);
   assert.ok(draft.execution.applicationRequiredTools.includes('get_match_patterns'));
@@ -237,7 +176,10 @@ test('Azure analyst omission is repaired only by a new model selection; repeated
     azureRequired,
     azureRequired,
   ]);
-  const withheld = await investigateFactStory(input, { config, fetcher: repeated.fetcher });
+  const withheld = await investigateFactStory(input, {
+    config,
+    fetcher: repeated.fetcher,
+  });
   assert.equal(withheld.status, 'withheld');
   assert.deepEqual(withheld.claims, []);
   assert.equal(repeated.count(), 3);
@@ -248,14 +190,19 @@ test('Azure analyst omission is repaired only by a new model selection; repeated
     false,
   );
 });
-
 test('Azure uses model-selected audience evidence once and newcomer selection stays simple', async () => {
   const analyst = provider([
     toolReply(['get_event_sequence', 'score_at_moment', 'get_match_patterns']),
     azureContext,
-    reply({ decision: 'approve', issues: [] }),
+    reply({
+      decision: 'approve',
+      issues: [],
+    }),
   ]);
-  const draft = await investigateFactStory(input, { config, fetcher: analyst.fetcher });
+  const draft = await investigateFactStory(input, {
+    config,
+    fetcher: analyst.fetcher,
+  });
   assert.equal(draft.status, 'draft');
   assert.equal(draft.execution.toolCalls, 3);
   assert.equal(
@@ -265,11 +212,20 @@ test('Azure uses model-selected audience evidence once and newcomer selection st
   const newcomer = provider([
     toolReply(['get_event_sequence', 'score_at_moment']),
     azureRequired,
-    reply({ decision: 'approve', issues: [] }),
+    reply({
+      decision: 'approve',
+      issues: [],
+    }),
   ]);
   const simple = await investigateFactStory(
-    { ...input, audience: 'newcomer' },
-    { config, fetcher: newcomer.fetcher },
+    {
+      ...input,
+      audience: 'newcomer',
+    },
+    {
+      config,
+      fetcher: newcomer.fetcher,
+    },
   );
   assert.equal(simple.status, 'draft');
   assert.deepEqual(
@@ -279,7 +235,6 @@ test('Azure uses model-selected audience evidence once and newcomer selection st
   assert.equal(simple.execution.toolCalls, 2);
   assert.equal(simple.execution.repairCount, 0);
 });
-
 test('Azure spatial context preserves the corrected frame and complete metric support', async () => {
   const mock = provider([
     toolReply(['get_event_sequence', 'score_at_moment', 'measure_moment']),
@@ -288,13 +243,24 @@ test('Azure spatial context preserves the corrected frame and complete metric su
         facts = packet.catalog.facts,
         candidate = facts.find((f) => f.kind === 'nearest-sampled-opponent');
       assert.ok(packet.contextRequirement.candidateFactIds.includes(candidate.id));
-      return reply({ factIds: [...mandatory(facts), candidate.id] });
+      return reply({
+        factIds: [...mandatory(facts), candidate.id],
+      });
     },
-    reply({ decision: 'approve', issues: [] }),
+    reply({
+      decision: 'approve',
+      issues: [],
+    }),
   ]);
   const draft = await investigateFactStory(
-    { ...input, audience: 'spatial' },
-    { config, fetcher: mock.fetcher },
+    {
+      ...input,
+      audience: 'spatial',
+    },
+    {
+      config,
+      fetcher: mock.fetcher,
+    },
   );
   assert.equal(draft.status, 'draft');
   assert.equal(draft.execution.toolCalls, 3);
@@ -310,7 +276,6 @@ test('Azure spatial context preserves the corrected frame and complete metric su
   assert.ok(fact.evidence.some((ref) => ref.type === 'metric'));
   assert.deepEqual(draft.claims.at(-1).evidence, fact.evidence);
 });
-
 test('Azure advertises only unexecuted useful sources and stops offering tools after they are gathered', async () => {
   const mock = provider([
     (body) => {
@@ -328,9 +293,15 @@ test('Azure advertises only unexecuted useful sources and stops offering tools a
       assert.ok(facts.some((f) => f.kind === 'nearest-sampled-opponent'));
       return azureContext(body);
     },
-    reply({ decision: 'approve', issues: [] }),
+    reply({
+      decision: 'approve',
+      issues: [],
+    }),
   ]);
-  const draft = await investigateFactStory(input, { config, fetcher: mock.fetcher });
+  const draft = await investigateFactStory(input, {
+    config,
+    fetcher: mock.fetcher,
+  });
   assert.equal(draft.status, 'draft');
   assert.equal(draft.execution.toolCalls, 4);
   assert.equal(draft.execution.modelCalls, 3);
@@ -343,6 +314,12 @@ test('Azure advertises only unexecuted useful sources and stops offering tools a
   assert.equal(draft.execution.repairCount, 0);
   const count = draft.selectedFacts.at(-1);
   assert.equal(count.kind, 'window-event-count');
-  assert.deepEqual(count.evidence, [{ type: 'event', id: 'wide-902-pass', revision: 2 }]);
+  assert.deepEqual(count.evidence, [
+    {
+      type: 'event',
+      id: 'wide-902-pass',
+      revision: 2,
+    },
+  ]);
   assert.deepEqual(draft.claims.at(-1).evidence, count.evidence);
 });

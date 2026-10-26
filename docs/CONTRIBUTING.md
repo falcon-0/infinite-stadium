@@ -29,6 +29,6 @@ Git attributes keep text line endings consistent across Windows and Linux. Run `
 
 Offline checks do not establish model accuracy. Freeze new question inputs and expected source facts before inference. Record first outcomes, failures, model calls and latency. Keep tuning cases separate from evaluation cases and never send expected answers to the model. Selected successes do not establish general accuracy.
 
-Watch is the submitted product. Legacy producer and optional local-provider modules still have imports and tests; audit dependencies before removing them. Build the allowlisted archive with `python package_judge.py`, then verify it with `python verify_judge_package.py`. Generated media, provider traces, installed tools and private configuration stay outside public source.
+Watch is the submitted product. Keep changes focused and preserve the evidence and timestamp contracts. Build the allowlisted archive with `python package_judge.py`, then verify it with `python verify_judge_package.py`. Generated media, provider traces, installed tools and private configuration stay outside public source.
 
 Continue in the existing GitHub repository. This cleanup adds no project license; retain required third-party notices. Deployment, video publication and final submission are separate actions.

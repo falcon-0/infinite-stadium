@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluationCases, evaluationAdapters, runEvaluation } from './evaluation.js';
 import { spawnSync } from 'node:child_process';
-
 test('offline evaluation uses new seeds, checks abstention and never contacts a provider', async () => {
   const cases = evaluationCases();
   assert.ok(cases.every((c) => c.input.seed !== 17));
@@ -28,7 +27,6 @@ test('offline evaluation uses new seeds, checks abstention and never contacts a 
   );
   assert.ok(report.results.every((r) => r.semanticReview.label === null));
 });
-
 test('isolated adapter selection keeps offline canonical selection disabled without provider or runner calls', async () => {
   let calls = 0;
   const forbidden = () => {
@@ -39,13 +37,15 @@ test('isolated adapter selection keeps offline canonical selection disabled with
     const adapters = evaluationAdapters({
       adapter: 'fact-selection',
       fetcher: forbidden,
-      localRunner: forbidden,
     });
     assert.deepEqual(
       adapters.map((a) => a.id),
       ['fact-selection'],
     );
-    const report = await runEvaluation({ cases: evaluationCases(), adapters });
+    const report = await runEvaluation({
+      cases: evaluationCases(),
+      adapters,
+    });
     assert.equal(report.summaries.length, 1);
     assert.equal(report.summaries[0].skipped, 18);
   }
@@ -60,85 +60,23 @@ test('isolated adapter selection keeps offline canonical selection disabled with
     ['template'],
   );
   assert.equal(
-    (await runEvaluation({ cases: evaluationCases(), adapters: template })).summaries[0].failed,
+    (
+      await runEvaluation({
+        cases: evaluationCases(),
+        adapters: template,
+      })
+    ).summaries[0].failed,
     0,
   );
   assert.equal(calls, 0);
-  assert.throws(() => evaluationAdapters({ adapter: 'unknown' }), /supported evaluation adapter/);
+  assert.throws(
+    () =>
+      evaluationAdapters({
+        adapter: 'unknown',
+      }),
+    /supported evaluation adapter/,
+  );
 });
-
-test('isolated local canonical selection uses its bounded worker and no cloud adapter', async () => {
-  const cases = [
-    evaluationCases().find((c) => c.label === 'segment-end'),
-    evaluationCases().find((c) => c.id === 'central-101-future-goal'),
-  ];
-  let calls = 0;
-  const localRunner = async (packet) => {
-    calls++;
-    let raw,
-      tools = [];
-    if (packet.mode === 'fact-tool-selector') {
-      assert.equal(calls, 1);
-      assert.ok(packet.outputs.get_event_sequence);
-      assert.ok(packet.outputs.get_match_patterns);
-      tools = ['get_event_sequence', 'get_match_patterns'];
-      raw = { tools };
-    } else if (packet.mode === 'fact-selection') {
-      assert.equal(calls, 2);
-      const moment = packet.catalog.facts.find((f) => f.kind === 'moment'),
-        count = packet.catalog.facts.find(
-          (f) =>
-            f.kind === 'window-event-count' &&
-            f.values.team === 'away' &&
-            f.values.category === 'shots',
-        );
-      assert.equal(count.values.count, 2);
-      raw = { slots: [moment.slot, count.slot] };
-    } else {
-      assert.equal(packet.mode, 'fact-editorial-review');
-      assert.equal(calls, 3);
-      assert.deepEqual(
-        new Set(packet.renderedClaims[1].evidence.map((r) => `${r.id}@${r.revision}`)),
-        new Set(['extended-2039-7-shot@2', 'extended-2039-11-shot@2']),
-      );
-      raw = { decision: 'approve', issues: [] };
-    }
-    return {
-      raw,
-      tools,
-      modelCalls: 1,
-      elapsedMs: 1,
-      usageReportedCalls: 1,
-      usage: { promptTokens: 10, completionTokens: 5 },
-    };
-  };
-  const adapters = evaluationAdapters({
-    local: true,
-    adapter: 'fact-selection',
-    localRunner,
-    fetcher: () => {
-      throw new Error('Cloud calls forbidden.');
-    },
-  });
-  const report = await runEvaluation({ cases, adapters });
-  assert.equal(calls, 3);
-  assert.equal(report.summaries.length, 1);
-  assert.equal(report.summaries[0].drafts, 1);
-  assert.equal(report.summaries[0].correctAbstentions, 1);
-  assert.equal(report.summaries[0].failed, 0);
-  assert.equal(report.results[0].provider, 'local');
-  assert.equal(report.results[0].model, 'qwen3:4b');
-  assert.deepEqual(report.results[0].authorship, {
-    selection: 'local-model',
-    mandatoryFacts: 'application-domain-rules',
-    additionalContext: 'local-model',
-    wording: 'application-fact-templates',
-  });
-  assert.equal(report.results[0].selectedFactIds.length, 2);
-  assert.equal(report.results[0].execution.workerCalls, 3);
-  assert.equal(report.summaries[0].semanticQuality, null);
-});
-
 test('isolated Azure canonical adapter validates full window citations and records template authorship', async () => {
   const cases = [evaluationCases().find((c) => c.label === 'segment-end')];
   let calls = 0;
@@ -153,7 +91,10 @@ test('isolated Azure canonical adapter validates full window citations and recor
           tool_calls: ['get_event_sequence', 'get_match_patterns'].map((name, i) => ({
             id: `call-${i}`,
             type: 'function',
-            function: { name, arguments: '{}' },
+            function: {
+              name,
+              arguments: '{}',
+            },
           })),
         },
       };
@@ -172,26 +113,48 @@ test('isolated Azure canonical adapter validates full window citations and recor
       );
       response = {
         finish_reason: 'stop',
-        message: { content: JSON.stringify({ factIds: [moment.id, count.id] }) },
+        message: {
+          content: JSON.stringify({
+            factIds: [moment.id, count.id],
+          }),
+        },
       };
     } else {
       assert.equal(calls, 3, 'Only the selected adapter may run');
       response = {
         finish_reason: 'stop',
-        message: { content: JSON.stringify({ decision: 'approve', issues: [] }) },
+        message: {
+          content: JSON.stringify({
+            decision: 'approve',
+            issues: [],
+          }),
+        },
       };
     }
     return new Response(
-      JSON.stringify({ choices: [response], usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+      JSON.stringify({
+        choices: [response],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 5,
+        },
+      }),
     );
   };
   const adapters = evaluationAdapters({
     live: true,
     adapter: 'fact-selection',
-    config: { url: 'https://test.openai.azure.com', deployment: 'test', key: 'test' },
+    config: {
+      url: 'https://test.openai.azure.com',
+      deployment: 'test',
+      key: 'test',
+    },
     fetcher,
   });
-  const report = await runEvaluation({ cases, adapters });
+  const report = await runEvaluation({
+    cases,
+    adapters,
+  });
   assert.equal(calls, 3);
   assert.equal(report.results.length, 1);
   assert.equal(report.summaries[0].drafts, 1);
@@ -207,7 +170,6 @@ test('isolated Azure canonical adapter validates full window citations and recor
   assert.equal(report.summaries[0].semanticQuality, null);
   assert.match(report.summaries[0].semanticQualityLimitation, /do not measure semantic truth/);
 });
-
 test('CLI rejects unknown or multiple adapter choices before any live execution', () => {
   for (const args of [
     ['--live', '--adapter=unknown'],
@@ -224,19 +186,43 @@ test('CLI rejects unknown or multiple adapter choices before any live execution'
 test('the comparison catches current-key mismatches, future citations and false abstention', async () => {
   const cases = evaluationCases().slice(0, 1);
   for (const adapter of [
-    { id: 'bad', run: async () => ({ key: 'wrong', claims: [] }) },
+    {
+      id: 'bad',
+      run: async () => ({
+        key: 'wrong',
+        claims: [],
+      }),
+    },
     {
       id: 'bad',
       run: async (input) => {
         const real = await evaluationAdapters()[0].run(input);
         return {
           ...real,
-          claims: [{ text: 'Future', evidence: [{ id: 'central-101-shot', revision: 1 }] }],
+          claims: [
+            {
+              text: 'Future',
+              evidence: [
+                {
+                  id: 'central-101-shot',
+                  revision: 1,
+                },
+              ],
+            },
+          ],
         };
       },
     },
   ])
-    assert.equal((await runEvaluation({ cases, adapters: [adapter] })).summaries[0].failed, 1);
+    assert.equal(
+      (
+        await runEvaluation({
+          cases,
+          adapters: [adapter],
+        })
+      ).summaries[0].failed,
+      1,
+    );
   const unavailable = evaluationCases()
     .filter((c) => c.expectedInvalid)
     .slice(0, 1);
@@ -249,8 +235,12 @@ test('the comparison catches current-key mismatches, future citations and false 
     },
   };
   assert.equal(
-    (await runEvaluation({ cases: unavailable, adapters: [outage] })).summaries[0]
-      .correctAbstentions,
+    (
+      await runEvaluation({
+        cases: unavailable,
+        adapters: [outage],
+      })
+    ).summaries[0].correctAbstentions,
     0,
   );
 });
@@ -258,17 +248,44 @@ test('withheld outputs cannot contain claims, repeated runs retain denominators'
   const cases = evaluationCases().slice(0, 1),
     adapter = {
       id: 'withheld',
-      run: async () => ({ status: 'withheld', claims: [], review: 'Review rejected.' }),
+      run: async () => ({
+        status: 'withheld',
+        claims: [],
+        review: 'Review rejected.',
+      }),
     };
-  const report = await runEvaluation({ cases, adapters: [adapter], repeat: 3 });
+  const report = await runEvaluation({
+    cases,
+    adapters: [adapter],
+    repeat: 3,
+  });
   assert.equal(report.summaries[0].withheld, 3);
   assert.equal(report.results.length, 3);
   assert.equal(report.summaries[0].semanticQuality, null);
-  adapter.run = async () => ({ status: 'withheld', claims: [{ text: 'Hidden draft' }] });
-  assert.equal((await runEvaluation({ cases, adapters: [adapter] })).summaries[0].failed, 1);
-  await assert.rejects(runEvaluation({ repeat: 11 }), /repeat/);
+  adapter.run = async () => ({
+    status: 'withheld',
+    claims: [
+      {
+        text: 'Hidden draft',
+      },
+    ],
+  });
+  assert.equal(
+    (
+      await runEvaluation({
+        cases,
+        adapters: [adapter],
+      })
+    ).summaries[0].failed,
+    1,
+  );
+  await assert.rejects(
+    runEvaluation({
+      repeat: 11,
+    }),
+    /repeat/,
+  );
 });
-
 test('variant fixture evaluation checks independently specified final action and pass totals', async () => {
   const segment = evaluationCases().find((c) => c.label === 'segment-end');
   assert.deepEqual(segment.expected, {
@@ -285,14 +302,24 @@ test('variant fixture evaluation checks independently specified final action and
     eventCount: 50,
   });
   const adapters = evaluationAdapters().slice(0, 1);
-  const valid = await runEvaluation({ cases: [segment], adapters });
+  const valid = await runEvaluation({
+    cases: [segment],
+    adapters,
+  });
   assert.equal(Object.keys(valid.results[0].fixtureChecks).length, 11);
   assert.ok(Object.values(valid.results[0].fixtureChecks).every(Boolean));
   const wrong = {
     ...segment,
-    expected: { ...segment.expected, completedPasses: 12, eventCount: 60 },
+    expected: {
+      ...segment.expected,
+      completedPasses: 12,
+      eventCount: 60,
+    },
   };
-  const invalid = await runEvaluation({ cases: [wrong], adapters });
+  const invalid = await runEvaluation({
+    cases: [wrong],
+    adapters,
+  });
   assert.equal(invalid.results[0].fixtureChecks.completedPasses, false);
   assert.equal(invalid.results[0].fixtureChecks.eventCount, false);
   assert.equal(invalid.results[0].fixtureChecks.score, true);

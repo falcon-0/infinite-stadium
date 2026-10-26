@@ -31,4 +31,4 @@ For a source archive run `python package_judge.py`, then `python verify_judge_pa
 
 ## Limits
 
-This is a schematic synthetic replay, not a real-match stream. AI responses can be slow or fail; unavailable AI is explicitly reported. Source consistency does not prove a real-world fact. Selected automated checks are not a human study or universal correctness guarantee. Optional local-model and legacy producer files are not required for the Watch demonstration.
+This is a schematic synthetic replay, not a real-match stream. AI responses can be slow or fail; unavailable AI is explicitly reported. Source consistency does not prove a real-world fact. Selected automated checks are not a human study or universal correctness guarantee.
