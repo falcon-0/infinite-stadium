@@ -23,8 +23,6 @@ import { integratedMatch } from './match-stream.js';
 import { investigateWithAgents } from './agent-workflow.js';
 import { investigateFactStory } from './fact-workflow.js';
 import { createAccessSessions } from './access-sessions.js';
-import { localStatus, generateLocalDraft, investigateLocally } from './local-ai.js';
-import { investigateLocalFactStory } from './local-fact-workflow.js';
 import { generateRecapStory } from './recap-workflow.js';
 import { buildRecapCue } from './recap-cue.js';
 import { exportSyntheticDataset } from './dataset-export.js';
@@ -45,7 +43,11 @@ const files = new Map([
   ['/catchup.js', 'catchup.js'],
   ['/localization.js', 'localization.js'],
 ]);
-const types = { html: 'text/html', js: 'text/javascript', css: 'text/css' };
+const types = {
+  html: 'text/html',
+  js: 'text/javascript',
+  css: 'text/css',
+};
 files.set('/investigation-cache.js', 'investigation-cache.js');
 files.set('/producer-cue.js', 'producer-cue.js');
 files.set('/player-focus.js', 'player-focus.js');
@@ -113,12 +115,12 @@ function budgetFilename(value) {
 export function createServer({
   env = process.env,
   fetcher = fetch,
-  localRunner,
-  localStatusReader = localStatus,
   sharedBudget,
   sharedAccess,
   questionFailureLogger = (summary) => console.error(JSON.stringify(summary)),
 } = {}) {
+  if (env.AI_PROVIDER && env.AI_PROVIDER !== 'azure')
+    throw new Error('Only the Azure AI provider is supported.');
   const settings = serverSettings(env),
     filename = budgetFilename(env.MODEL_BUDGET_FILE);
   const accessCode = env.APP_ACCESS_CODE;
@@ -153,12 +155,12 @@ export function createServer({
   const budget =
     sharedBudget ||
     (filename
-      ? createPersistentModelBudget({ limit: settings.dailyModelCalls, filename })
+      ? createPersistentModelBudget({
+          limit: settings.dailyModelCalls,
+          filename,
+        })
       : modelBudget(settings.dailyModelCalls));
   const access = sharedAccess || createAccessSessions(settings);
-  const local = env.AI_PROVIDER === 'local';
-  if (local && settings.publicHost)
-    throw new Error('Local inference currently requires loopback hosting.');
   let generating = false,
     streams = 0;
   const countedFetch = async (...args) => {
@@ -175,7 +177,9 @@ export function createServer({
       try {
         requestURL = new URL(req.url, 'http://localhost');
       } catch {
-        json(res, 400, { error: 'Invalid request URL.' });
+        json(res, 400, {
+          error: 'Invalid request URL.',
+        });
         return;
       }
       const path = requestURL.pathname;
@@ -190,12 +194,18 @@ export function createServer({
         requestURL.searchParams.get('view') === 'studio'
       ) {
         requestURL.searchParams.set('view', 'watch');
-        res.writeHead(302, { Location: `/${requestURL.search}`, 'Cache-Control': 'no-store' });
+        res.writeHead(302, {
+          Location: `/${requestURL.search}`,
+          'Cache-Control': 'no-store',
+        });
         res.end();
         return;
       }
       if (path === '/api/health' && req.method === 'GET') {
-        json(res, 200, { healthy: true, synthetic: true });
+        json(res, 200, {
+          healthy: true,
+          synthetic: true,
+        });
         return;
       }
       if (
@@ -203,11 +213,15 @@ export function createServer({
         req.method === 'POST'
       ) {
         if (req.headers.origin && !settings.origins.includes(req.headers.origin)) {
-          json(res, 403, { error: 'Origin is not allowed.' });
+          json(res, 403, {
+            error: 'Origin is not allowed.',
+          });
           return;
         }
         if (!req.headers['content-type']?.startsWith('application/json')) {
-          json(res, 415, { error: 'Use application/json.' });
+          json(res, 415, {
+            error: 'Use application/json.',
+          });
           return;
         }
         try {
@@ -243,11 +257,15 @@ export function createServer({
       }
       if (path === '/api/producer/validate' && req.method === 'POST') {
         if (req.headers.origin && !settings.origins.includes(req.headers.origin)) {
-          json(res, 403, { error: 'Origin is not allowed.' });
+          json(res, 403, {
+            error: 'Origin is not allowed.',
+          });
           return;
         }
         if (!req.headers['content-type']?.startsWith('application/json')) {
-          json(res, 415, { error: 'Use application/json.' });
+          json(res, 415, {
+            error: 'Use application/json.',
+          });
           return;
         }
         try {
@@ -290,11 +308,18 @@ export function createServer({
             // internal bearer credential stays private and is never sent to browsers.
             const login =
               accessCode && authorized(req.headers.authorization, accessCode)
-                ? { headers: { ...req.headers, authorization: `Bearer ${settings.token}` } }
+                ? {
+                    headers: {
+                      ...req.headers,
+                      authorization: `Bearer ${settings.token}`,
+                    },
+                  }
                 : req;
             await access.authenticate(login, res);
           } else await access.clear(req, res);
-          json(res, 200, { authenticated: req.method === 'POST' || (await access.status(req)) });
+          json(res, 200, {
+            authenticated: req.method === 'POST' || (await access.status(req)),
+          });
         } catch (error) {
           json(res, error instanceof GenerationError ? error.status : 500, {
             error: error instanceof GenerationError ? error.message : 'Unable to update AI access.',
@@ -304,7 +329,9 @@ export function createServer({
       }
       if (path === '/api/stream' && req.method === 'GET') {
         if (streams >= 4) {
-          json(res, 429, { error: 'Stream limit reached.' });
+          json(res, 429, {
+            error: 'Stream limit reached.',
+          });
           return;
         }
         const params = new URL(req.url, 'http://localhost').searchParams;
@@ -319,7 +346,9 @@ export function createServer({
         };
         const speed = Number(params.get('speed') || 1);
         if (!Number.isFinite(speed) || speed < 1 || speed > 12) {
-          json(res, 400, { error: 'Choose a stream speed from 1 to 12.' });
+          json(res, 400, {
+            error: 'Choose a stream speed from 1 to 12.',
+          });
           return;
         }
         let first, feed;
@@ -327,7 +356,9 @@ export function createServer({
           feed = integratedFeed(input.kind, input.seed);
           first = integratedMatch(input, feed);
         } catch {
-          json(res, 400, { error: 'Invalid stream settings.' });
+          json(res, 400, {
+            error: 'Invalid stream settings.',
+          });
           return;
         }
         const resume = req.headers['last-event-id'];
@@ -340,7 +371,9 @@ export function createServer({
             time < 0 ||
             time > first.state.metadata.observationHorizon
           ) {
-            json(res, 400, { error: 'Invalid stream resume cursor.' });
+            json(res, 400, {
+              error: 'Invalid stream resume cursor.',
+            });
             return;
           }
           input.time = time;
@@ -406,7 +439,9 @@ export function createServer({
             }),
           );
         } catch {
-          json(res, 400, { error: 'Invalid integrated match query.' });
+          json(res, 400, {
+            error: 'Invalid integrated match query.',
+          });
         }
         return;
       }
@@ -449,7 +484,9 @@ export function createServer({
             }),
           );
         } catch {
-          json(res, 400, { error: 'Invalid recap query.' });
+          json(res, 400, {
+            error: 'Invalid recap query.',
+          });
         }
         return;
       }
@@ -467,7 +504,9 @@ export function createServer({
             }),
           );
         } catch {
-          json(res, 400, { error: 'Invalid scene query.' });
+          json(res, 400, {
+            error: 'Invalid scene query.',
+          });
         }
         return;
       }
@@ -477,10 +516,6 @@ export function createServer({
             authRequired: !!settings.token && !(await access.status(req)),
             accessConfigured: !!settings.token,
           };
-          if (local) {
-            json(res, 200, { ...(await localStatusReader()), ...accessStatus });
-            return;
-          }
           const status = {
             provider: 'azure',
             configured: !!configuration(env),
@@ -488,7 +523,10 @@ export function createServer({
             ...accessStatus,
           };
           if (!status.configured) {
-            json(res, 200, { ...status, available: false });
+            json(res, 200, {
+              ...status,
+              available: false,
+            });
             return;
           }
           try {
@@ -500,7 +538,9 @@ export function createServer({
               questionAvailable: modelBudget.limit - modelBudget.calls >= 3,
               modelBudget,
               ...(!available
-                ? { error: 'Daily model-call limit reached. Recorded insights remain available.' }
+                ? {
+                    error: 'Daily model-call limit reached. Recorded insights remain available.',
+                  }
                 : {}),
             });
           } catch {
@@ -512,27 +552,31 @@ export function createServer({
           }
         } catch {
           json(res, 200, {
-            provider: local ? 'local' : 'azure',
+            provider: 'azure',
             configured: false,
             connected: false,
-            error: local
-              ? 'Local AI status is unavailable.'
-              : 'Azure configuration needs attention.',
+            error: 'Azure configuration needs attention.',
           });
         }
         return;
       }
       if (path === '/api/studio/recap-cue' && req.method === 'POST') {
         if (req.headers.origin && !settings.origins.includes(req.headers.origin)) {
-          json(res, 403, { error: 'Origin is not allowed.' });
+          json(res, 403, {
+            error: 'Origin is not allowed.',
+          });
           return;
         }
         if (!(await access.isAuthorized(req))) {
-          json(res, 401, { error: 'Authorization required.' });
+          json(res, 401, {
+            error: 'Authorization required.',
+          });
           return;
         }
         if (!req.headers['content-type']?.startsWith('application/json')) {
-          json(res, 415, { error: 'Use application/json.' });
+          json(res, 415, {
+            error: 'Use application/json.',
+          });
           return;
         }
         try {
@@ -561,7 +605,10 @@ export function createServer({
             input.requestKey.length > 4096
           )
             throw new GenerationError('Invalid recap export request.', 400);
-          const bundle = integratedMatch({ ...input.preferences, time: input.time });
+          const bundle = integratedMatch({
+            ...input.preferences,
+            time: input.time,
+          });
           json(
             res,
             200,
@@ -592,17 +639,23 @@ export function createServer({
         ].includes(path) &&
         req.method === 'POST'
       ) {
-        // Generation is guarded regardless of whether it consumes local compute or cloud credits.
+        // Protect model generation with the same access and usage controls.
         if (req.headers.origin && !settings.origins.includes(req.headers.origin)) {
-          json(res, 403, { error: 'Origin is not allowed.' });
+          json(res, 403, {
+            error: 'Origin is not allowed.',
+          });
           return;
         }
         if (!(await access.isAuthorized(req))) {
-          json(res, 401, { error: 'Authorization required.' });
+          json(res, 401, {
+            error: 'Authorization required.',
+          });
           return;
         }
         if (!req.headers['content-type']?.startsWith('application/json')) {
-          json(res, 415, { error: 'Use application/json.' });
+          json(res, 415, {
+            error: 'Use application/json.',
+          });
           return;
         }
         if (generating) {
@@ -640,16 +693,13 @@ export function createServer({
           const cancel = () => controller.abort();
           res.once('close', cancel);
           try {
-            const options = local
-              ? { runner: localRunner, signal: controller.signal }
-              : { config: configuration(env), fetcher: countedFetch, signal: controller.signal };
-            const generate = local
-              ? path === '/api/agent/story'
-                ? investigateLocalFactStory
-                : path === '/api/agent/investigate'
-                  ? investigateLocally
-                  : generateLocalDraft
-              : path === '/api/agent/story'
+            const options = {
+              config: configuration(env),
+              fetcher: countedFetch,
+              signal: controller.signal,
+            };
+            const generate =
+              path === '/api/agent/story'
                 ? investigateFactStory
                 : path === '/api/agent/investigate'
                   ? investigateWithAgents
@@ -664,11 +714,6 @@ export function createServer({
                   400,
                 );
               }
-              if (local)
-                throw new GenerationError(
-                  'Natural-language question interpretation currently requires Azure. Recorded match search remains available.',
-                  503,
-                );
               if (
                 !needsQuestionClarification(input) &&
                 !(input.anchorId && checked.status === 'no-results')
@@ -697,7 +742,10 @@ export function createServer({
                 res,
                 200,
                 await (path === '/api/agent/recap'
-                  ? generateRecapStory(input, { ...options, provider: local ? 'local' : 'azure' })
+                  ? generateRecapStory(input, {
+                      ...options,
+                      provider: 'azure',
+                    })
                   : generate(input, options)),
               );
           } finally {
@@ -719,7 +767,11 @@ export function createServer({
           }
           json(res, error instanceof GenerationError ? error.status : 500, {
             error: error instanceof GenerationError ? error.message : 'Unable to generate a draft.',
-            ...(error instanceof GenerationError && error.code ? { code: error.code } : {}),
+            ...(error instanceof GenerationError && error.code
+              ? {
+                  code: error.code,
+                }
+              : {}),
           });
         } finally {
           if (ownsGeneration) generating = false;

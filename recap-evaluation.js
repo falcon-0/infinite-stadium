@@ -3,15 +3,35 @@ import { configuration } from './ai.js';
 import { createRecapFacts } from './recap-facts.js';
 import { renderRecapFacts } from './recap-renderer.js';
 import { generateRecapStory } from './recap-workflow.js';
-
-const zero = { shots: 0, total: 0, known: 0, completed: 0, failed: 0, pending: 0 };
+const zero = {
+  shots: 0,
+  total: 0,
+  known: 0,
+  completed: 0,
+  failed: 0,
+  pending: 0,
+};
 const end = {
   home: 2,
   away: 1,
   eventCount: 50,
   teams: {
-    home: { shots: 2, total: 6, known: 6, completed: 4, failed: 2, pending: 0 },
-    away: { shots: 5, total: 6, known: 6, completed: 5, failed: 1, pending: 0 },
+    home: {
+      shots: 2,
+      total: 6,
+      known: 6,
+      completed: 4,
+      failed: 2,
+      pending: 0,
+    },
+    away: {
+      shots: 5,
+      total: 6,
+      known: 6,
+      completed: 5,
+      failed: 1,
+      pending: 0,
+    },
   },
 };
 // Independently fixed fixture expectations, not copied from the fact catalog.
@@ -26,27 +46,51 @@ export function recapEvaluationCases() {
   return [
     {
       id: 'pending-pass',
-      input: { ...input, time: 22 },
+      input: {
+        ...input,
+        time: 22,
+      },
       expected: {
         home: 0,
         away: 0,
         eventCount: 2,
         status: 'in-progress',
         teams: {
-          home: { shots: 0, total: 1, known: 0, completed: 0, failed: 0, pending: 1 },
-          away: { ...zero },
+          home: {
+            shots: 0,
+            total: 1,
+            known: 0,
+            completed: 0,
+            failed: 0,
+            pending: 1,
+          },
+          away: {
+            ...zero,
+          },
         },
       },
     },
     {
       id: 'before-completion',
-      input: { ...input, time: 359 },
-      expected: { ...end, status: 'in-progress' },
+      input: {
+        ...input,
+        time: 359,
+      },
+      expected: {
+        ...end,
+        status: 'in-progress',
+      },
     },
     {
       id: 'received-segment-end',
-      input: { ...input, time: 362 },
-      expected: { ...end, status: 'demo-segment-complete' },
+      input: {
+        ...input,
+        time: 362,
+      },
+      expected: {
+        ...end,
+        status: 'demo-segment-complete',
+      },
     },
     {
       id: 'confirmed-short-pass',
@@ -64,14 +108,29 @@ export function recapEvaluationCases() {
         eventCount: 2,
         status: 'in-progress',
         teams: {
-          home: { shots: 0, total: 1, known: 1, completed: 1, failed: 0, pending: 0 },
-          away: { ...zero },
+          home: {
+            shots: 0,
+            total: 1,
+            known: 1,
+            completed: 1,
+            failed: 0,
+            pending: 0,
+          },
+          away: {
+            ...zero,
+          },
         },
       },
     },
     {
       id: 'favorite-player-segment-end',
-      input: { ...input, seed: 17, time: 362, audience: 'player', favoritePlayer: 'D. Silva' },
+      input: {
+        ...input,
+        seed: 17,
+        time: 362,
+        audience: 'player',
+        favoritePlayer: 'D. Silva',
+      },
       expected: {
         ...end,
         status: 'demo-segment-complete',
@@ -89,8 +148,16 @@ export function recapEvaluationCases() {
           start: 0,
           end: 362,
           evidence: [1, 3, 5, 7, 11].flatMap((phase) => [
-            { type: 'event', id: `extended-17-${phase}-receive`, revision: 1 },
-            { type: 'event', id: `extended-17-${phase}-shot`, revision: 2 },
+            {
+              type: 'event',
+              id: `extended-17-${phase}-receive`,
+              revision: 1,
+            },
+            {
+              type: 'event',
+              id: `extended-17-${phase}-shot`,
+              revision: 2,
+            },
           ]),
         },
         selectedGoal: {
@@ -105,21 +172,23 @@ export function recapEvaluationCases() {
         },
       },
     },
-    { id: 'empty-inventory', input: { ...input, time: 0 }, expectedInvalid: true },
+    {
+      id: 'empty-inventory',
+      input: {
+        ...input,
+        time: 0,
+      },
+      expectedInvalid: true,
+    },
   ];
 }
-
-export function recapEvaluationAdapters({
-  adapter = 'template',
-  live = false,
-  local = false,
-  config,
-  fetcher = fetch,
-  runner,
-} = {}) {
+export function recapEvaluationAdapters(options = {}) {
+  const { adapter = 'template', live = false, config, fetcher = fetch } = options;
+  if (options.local)
+    throw new RangeError('Local AI is unsupported; explicitly select Azure with --live.');
   if (!['template', 'fact-selection'].includes(adapter))
     throw new RangeError('Choose template or fact-selection recap evaluation.');
-  if ((live && local) || ((live || local) && adapter !== 'fact-selection'))
+  if (live && adapter !== 'fact-selection')
     throw new RangeError('Choose only one live provider and explicitly select fact-selection.');
   if (adapter === 'template')
     return [
@@ -162,7 +231,10 @@ export function recapEvaluationAdapters({
           const rendered = renderRecapFacts(
             prepared.catalog,
             chosen.map((f) => f.id),
-            { audience: prepared.audience, language: prepared.language.code },
+            {
+              audience: prepared.audience,
+              language: prepared.language.code,
+            },
           );
           return {
             ...prepared,
@@ -172,7 +244,10 @@ export function recapEvaluationAdapters({
             claims: rendered.claims,
             selectedFacts: chosen,
             selectedFactIds: chosen.map((f) => f.id),
-            authorship: { selection: 'application-policy', wording: 'application-fact-templates' },
+            authorship: {
+              selection: 'application-policy',
+              wording: 'application-fact-templates',
+            },
             execution: {
               modelCalls: 0,
               toolCalls: 0,
@@ -185,15 +260,21 @@ export function recapEvaluationAdapters({
         },
       },
     ];
-  if (!live && !local)
+  if (!live)
     return [
       {
         id: adapter,
-        skip: 'Model calls disabled; explicitly choose --local or --live with --adapter=fact-selection.',
+        skip: 'Model calls disabled; explicitly choose --live with --adapter=fact-selection.',
       },
     ];
-  const azureConfig = local ? null : config === undefined ? configuration() : config;
-  if (!local && !azureConfig) return [{ id: adapter, skip: 'Azure is not configured.' }];
+  const azureConfig = config === undefined ? configuration() : config;
+  if (!azureConfig)
+    return [
+      {
+        id: adapter,
+        skip: 'Azure is not configured.',
+      },
+    ];
   return [
     {
       id: adapter,
@@ -203,27 +284,14 @@ export function recapEvaluationAdapters({
           calls++;
           return fetcher(...args);
         };
-        const countedRunner = runner
-          ? async (...args) => {
-              calls++;
-              return runner(...args);
-            }
-          : undefined;
-        // The default runner is imported lazily only for explicit local evaluation.
-        let actualRunner = countedRunner;
-        if (local && !actualRunner) {
-          const { runLocalPacket } = await import('./local-ai.js');
-          actualRunner = async (...args) => {
-            calls++;
-            return runLocalPacket(...args);
-          };
-        }
+
+        // Count Azure requests so failed evaluations retain their actual model-call cost.
+
         try {
           return await generateRecapStory(input, {
-            provider: local ? 'local' : 'azure',
+            provider: 'azure',
             config: azureConfig,
             fetcher: countedFetch,
-            runner: actualRunner,
           });
         } catch (error) {
           error.evaluationModelCalls = calls;
@@ -233,7 +301,6 @@ export function recapEvaluationAdapters({
     },
   ];
 }
-
 const refKey = (r) => `${r.type}:${r.id}@${r.revision}`;
 const sameRefs = (a, b) =>
   Array.isArray(a) &&
@@ -278,7 +345,6 @@ function fixtureChecks(prepared, expected) {
   }
   return checks;
 }
-
 export async function runRecapEvaluation({
   cases = recapEvaluationCases(),
   adapters = recapEvaluationAdapters(),
@@ -291,10 +357,18 @@ export async function runRecapEvaluation({
         adapter: adapter.id,
         input: testCase.input,
         expectedInvalid: !!testCase.expectedInvalid,
-        semanticReview: { status: 'pending-human-review', label: null, notes: null },
+        semanticReview: {
+          status: 'pending-human-review',
+          label: null,
+          notes: null,
+        },
       };
       if (adapter.skip) {
-        results.push({ ...row, status: 'skipped', reason: adapter.skip });
+        results.push({
+          ...row,
+          status: 'skipped',
+          reason: adapter.skip,
+        });
         continue;
       }
       const started = performance.now();

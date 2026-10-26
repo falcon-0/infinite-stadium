@@ -10,7 +10,6 @@ import {
 import { GenerationError } from './ai.js';
 import { createRecapFacts } from './recap-facts.js';
 import { renderRecapFacts } from './recap-renderer.js';
-
 test('default recap evaluation is offline, with independent counts and complete 50-event overview', async () => {
   let calls = 0;
   const forbidden = () => {
@@ -18,7 +17,10 @@ test('default recap evaluation is offline, with independent counts and complete 
     throw new Error('Model execution forbidden.');
   };
   const report = await runRecapEvaluation({
-    adapters: recapEvaluationAdapters({ fetcher: forbidden, runner: forbidden }),
+    adapters: recapEvaluationAdapters({
+      fetcher: forbidden,
+      runner: forbidden,
+    }),
   });
   assert.equal(calls, 0);
   assert.equal(report.results.length, 6);
@@ -48,58 +50,6 @@ test('default recap evaluation is offline, with independent counts and complete 
   assert.equal(disabled.summaries[0].skipped, 6);
   assert.equal(calls, 0);
 });
-
-test('explicit local recap selection runs only its worker and records canonical selection coverage and tokens', async () => {
-  let calls = 0;
-  const runner = async (packet) => {
-    calls++;
-    assert.equal(packet.task, 'recap');
-    return {
-      raw:
-        packet.mode === 'fact-selection'
-          ? { slots: [1, ...packet.requiredSlots] }
-          : { decision: 'approve', issues: [], suggestions: [] },
-      tools: [],
-      modelCalls: 1,
-      elapsedMs: 1,
-      usageReportedCalls: 1,
-      usage: { promptTokens: 10, completionTokens: 5 },
-    };
-  };
-  const selected = recapEvaluationCases().filter(
-    (c) => c.id === 'received-segment-end' || c.expectedInvalid,
-  );
-  const report = await runRecapEvaluation({
-    cases: selected,
-    adapters: recapEvaluationAdapters({
-      adapter: 'fact-selection',
-      local: true,
-      runner,
-      fetcher: () => {
-        throw new Error('Azure forbidden.');
-      },
-    }),
-  });
-  assert.equal(calls, 2);
-  assert.equal(report.summaries[0].drafts, 1);
-  assert.equal(report.summaries[0].correctAbstentions, 1);
-  assert.equal(report.summaries[0].failed, 0);
-  assert.deepEqual(report.summaries[0].selectedKindCounts, {
-    'recap-overview': 1,
-    'recap-goal-score-change': 1,
-  });
-  assert.deepEqual(report.summaries[0].tokens, { prompt: 20, completion: 10 });
-  assert.equal(report.summaries[0].completeUsageRows, 1);
-  assert.equal(report.results[0].overviewReferenceCount, 50);
-  assert.equal(report.results[0].provider, 'local');
-  assert.deepEqual(report.results[0].authorship, {
-    selection: 'local-model',
-    mandatoryFacts: 'application-domain-rules',
-    additionalContext: 'local-model',
-    wording: 'application-fact-templates',
-  });
-});
-
 test('favorite-player evaluation independently requires ten D. Silva actor records plus the latest recorded lead', async () => {
   const testCase = recapEvaluationCases().find((c) => c.id === 'favorite-player-segment-end'),
     template = recapEvaluationAdapters()[0];
@@ -142,7 +92,10 @@ test('favorite-player evaluation independently requires ten D. Silva actor recor
     [lead.values.beforeHome, lead.values.beforeAway, lead.values.afterHome, lead.values.afterAway],
     [1, 1, 2, 1],
   );
-  const report = await runRecapEvaluation({ cases: [testCase], adapters: [template] });
+  const report = await runRecapEvaluation({
+    cases: [testCase],
+    adapters: [template],
+  });
   assert.equal(report.results[0].status, 'draft');
   assert.ok(Object.values(report.results[0].selectionChecks).every(Boolean));
   assert.equal(report.results[0].fixtureChecks['player.complete-support'], true);
@@ -150,13 +103,21 @@ test('favorite-player evaluation independently requires ten D. Silva actor recor
   assert.equal(report.results[0].claims.find((c) => c.factId === profile.id).evidence.length, 10);
   const wrong = {
     ...testCase,
-    expected: { ...testCase.expected, player: { ...testCase.expected.player, total: 11 } },
+    expected: {
+      ...testCase.expected,
+      player: {
+        ...testCase.expected.player,
+        total: 11,
+      },
+    },
   };
-  const failed = await runRecapEvaluation({ cases: [wrong], adapters: [template] });
+  const failed = await runRecapEvaluation({
+    cases: [wrong],
+    adapters: [template],
+  });
   assert.equal(failed.results[0].status, 'failed');
   assert.equal(failed.results[0].fixtureChecks['player.total'], false);
 });
-
 test('canonical generic team counts and earlier goal facts cannot substitute for required player or latest-score context', async () => {
   const player = recapEvaluationCases().find((c) => c.id === 'favorite-player-segment-end'),
     end = recapEvaluationCases().find((c) => c.id === 'received-segment-end');
@@ -177,7 +138,10 @@ test('canonical generic team counts and earlier goal facts cannot substitute for
         selectedFacts,
         selectedFactIds,
         claims: rendered.claims,
-        execution: { modelCalls: 0, usageReportedCalls: 0 },
+        execution: {
+          modelCalls: 0,
+          usageReportedCalls: 0,
+        },
       };
     },
   });
@@ -203,46 +167,6 @@ test('canonical generic team counts and earlier goal facts cannot substitute for
   assert.equal(stale.results[0].status, 'failed');
   assert.equal(stale.results[0].selectionChecks.latestRecordedGoalIncluded, false);
 });
-
-test('mock local favorite-player adapter preserves the independently required profile without any Azure execution', async () => {
-  const testCase = recapEvaluationCases().find((c) => c.id === 'favorite-player-segment-end');
-  let calls = 0;
-  const runner = async (packet) => {
-    calls++;
-    return {
-      raw:
-        packet.mode === 'fact-selection'
-          ? { slots: [1, packet.audienceSelectionRule.playerFactSlot, ...packet.requiredSlots] }
-          : { decision: 'approve', issues: [], suggestions: [] },
-      tools: [],
-      modelCalls: 1,
-      elapsedMs: 1,
-      usageReportedCalls: 1,
-      usage: { promptTokens: 10, completionTokens: 5 },
-    };
-  };
-  const report = await runRecapEvaluation({
-    cases: [testCase],
-    adapters: recapEvaluationAdapters({
-      adapter: 'fact-selection',
-      local: true,
-      runner,
-      fetcher: () => {
-        throw new Error('Azure forbidden');
-      },
-    }),
-  });
-  assert.equal(calls, 2);
-  assert.equal(report.results[0].status, 'draft');
-  assert.ok(Object.values(report.results[0].selectionChecks).every(Boolean));
-  assert.deepEqual(report.results[0].selectedKinds, [
-    'recap-overview',
-    'recap-player-actions',
-    'recap-goal-score-change',
-  ]);
-  assert.equal(report.results[0].claims[1].evidence.length, 10);
-});
-
 test('provider failures and calls before an empty-inventory rejection do not masquerade as abstention', async () => {
   const cases = recapEvaluationCases().filter((c) => c.expectedInvalid);
   for (const status of [503, 429]) {
@@ -276,7 +200,6 @@ test('provider failures and calls before an empty-inventory rejection do not mas
   assert.equal(report.summaries[0].correctAbstentions, 0);
   assert.equal(report.results[0].modelCallsBeforeError, 1);
 });
-
 test('explicit Azure adapter accepts the current mandatory overview and nullable context wire contract', async () => {
   let calls = 0;
   const fetcher = async (_url, options) => {
@@ -314,12 +237,26 @@ test('explicit Azure adapter accepts the current mandatory overview and nullable
       };
     } else {
       assert.equal(calls, 2, 'The isolated adapter must not execute another workflow.');
-      raw = { decision: 'approve', issues: [], suggestions: [] };
+      raw = {
+        decision: 'approve',
+        issues: [],
+        suggestions: [],
+      };
     }
     return new Response(
       JSON.stringify({
-        choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(raw) } }],
-        usage: { prompt_tokens: 10, completion_tokens: 5 },
+        choices: [
+          {
+            finish_reason: 'stop',
+            message: {
+              content: JSON.stringify(raw),
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 5,
+        },
       }),
     );
   };
@@ -353,7 +290,6 @@ test('explicit Azure adapter accepts the current mandatory overview and nullable
     wording: 'application-fact-templates',
   });
 });
-
 test('evaluation catches wrong received scope, altered selected count and independent fixture mismatch', async () => {
   const end = recapEvaluationCases().find((c) => c.id === 'received-segment-end'),
     template = recapEvaluationAdapters()[0];
@@ -376,15 +312,26 @@ test('evaluation catches wrong received scope, altered selected count and indepe
         return output;
       },
     };
-    const report = await runRecapEvaluation({ cases: [end], adapters: [adapter] });
+    const report = await runRecapEvaluation({
+      cases: [end],
+      adapters: [adapter],
+    });
     assert.equal(report.summaries[0].failed, 1);
   }
-  const wrong = { ...end, expected: { ...end.expected, eventCount: 49 } };
-  const report = await runRecapEvaluation({ cases: [wrong], adapters: [template] });
+  const wrong = {
+    ...end,
+    expected: {
+      ...end.expected,
+      eventCount: 49,
+    },
+  };
+  const report = await runRecapEvaluation({
+    cases: [wrong],
+    adapters: [template],
+  });
   assert.equal(report.results[0].fixtureChecks.eventCount, false);
   assert.equal(report.summaries[0].failed, 1);
 });
-
 test('CLI requires explicit isolated model adapter and rejects invalid flags before execution', () => {
   const directory = new URL('./artifacts/evaluations/', import.meta.url);
   const artifacts = () =>
@@ -412,11 +359,20 @@ test('CLI requires explicit isolated model adapter and rejects invalid flags bef
     assert.equal(result.stdout, '');
   }
   assert.deepEqual(artifacts(), before, 'Invalid options must not write a recap report.');
-  assert.throws(() => recapEvaluationAdapters({ local: true }), /explicitly/);
+  assert.throws(
+    () =>
+      recapEvaluationAdapters({
+        local: true,
+      }),
+    /explicitly/,
+  );
   const offline = spawnSync(
     process.execPath,
     ['recap-evaluation-cli.js', '--adapter=fact-selection'],
-    { cwd: new URL('.', import.meta.url), encoding: 'utf8' },
+    {
+      cwd: new URL('.', import.meta.url),
+      encoding: 'utf8',
+    },
   );
   assert.equal(offline.status, 0);
   assert.match(offline.stdout, /0 drafts.*6 skipped/);

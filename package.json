@@ -8,12 +8,10 @@
   },
   "scripts": {
     "start": "node server.js",
-    "start:local": "node start-local.js",
     "start:azure": "node --env-file=.env.azure server.js",
     "test": "node --test *.test.js",
     "evaluate": "node evaluation-cli.js",
     "evaluate:recap": "node recap-evaluation-cli.js",
-    "probe:local": "node local-agent-cli.js",
     "validate:data": "node fixture-validation-cli.js",
     "evaluate:catalogue": "node catalogue-evaluation-cli.js",
     "verify:release": "node release-check.js",

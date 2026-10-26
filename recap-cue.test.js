@@ -19,35 +19,38 @@ async function fixture(changes = {}) {
   delete preferences.time;
   const input = { source: 'integrated-match', mode: 'recap', time, ...preferences };
   const draft = await generateRecapStory(input, {
-    provider: 'local',
-    runner: async (packet) => {
+    config: { url: 'https://test.openai.azure.com', deployment: 'test', key: 'test' },
+    fetcher: async (_url, options) => {
+      const request = JSON.parse(options.body);
+      const packet = JSON.parse(request.messages[1].content);
       let raw;
-      if (packet.mode === 'fact-selection') {
+      if (request.response_format.json_schema.name === 'recap_fact_selection') {
+        const required = packet.requiredFactIds[0];
         const profile = packet.audienceSelectionRule.blocking
-          ? [packet.audienceSelectionRule.playerFactSlot]
+          ? [packet.audienceSelectionRule.playerFactId]
           : [];
         const goals = packet.catalog.facts
-          .filter((f) => f.kind === 'recap-goal-score-change')
-          .map((f) => f.slot);
-        raw = {
-          slots: profile.length
-            ? [1, ...profile, ...packet.requiredSlots]
-            : [1, ...goals].slice(0, packet.maximum),
-        };
+          .filter((fact) => fact.kind === 'recap-goal-score-change')
+          .map((fact) => fact.id);
+        const optional = profile.length ? profile : goals.filter((id) => id !== required);
+        raw = { overviewFactId: packet.catalog.facts[0].id };
+        for (let i = 1; i < packet.maximum; i++) {
+          raw[`context${i}`] =
+            required && i === packet.maximum - 1 ? required : (optional.shift() ?? null);
+        }
       } else
         raw = {
           decision: 'approve',
           issues: [],
           suggestions: ['A general audience may prefer an equalizer.'],
         };
-      return {
-        raw,
-        tools: [],
-        modelCalls: 1,
-        elapsedMs: 1,
-        usageReportedCalls: 1,
-        usage: { promptTokens: 10, completionTokens: 5 },
-      };
+      return new Response(
+        JSON.stringify({
+          choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(raw) } }],
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+        }),
+        { status: 200 },
+      );
     },
   });
   assert.equal(draft.status, 'draft');
@@ -290,7 +293,7 @@ test('supported translated recaps retain canonical wording and their own languag
       cue.segments.map((s) => s.text),
       f.draft.claims.map((c) => c.text),
     );
-    assert.equal(cue.authorship.selection, 'local-model');
+    assert.equal(cue.authorship.selection, 'azure-model');
   }
   const f = await fixture();
   f.draft.provider = 'azure';

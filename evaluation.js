@@ -2,43 +2,72 @@ import { performance } from 'node:perf_hooks';
 import { buildRequest, configuration, generateDraft, validateDraft } from './ai.js';
 import { investigateWithAgents } from './agent-workflow.js';
 import { investigateFactStory } from './fact-workflow.js';
-import { investigateLocalFactStory } from './local-fact-workflow.js';
 import { createInvestigationTools } from './investigation-tools.js';
 import { integratedMatch } from './match-stream.js';
-import { generateLocalDraft, investigateLocally } from './local-ai.js';
-
 export function evaluationCases() {
   const short = [
-    { kind: 'central', seed: 101 },
-    { kind: 'wide', seed: 902 },
+    {
+      kind: 'central',
+      seed: 101,
+    },
+    {
+      kind: 'wide',
+      seed: 902,
+    },
   ].flatMap((fixture) =>
     [
       {
         label: 'pending-pass',
         time: 2,
         event: 'pass',
-        expected: { scoreHome: 0, passAccuracy: null, anchorRevision: 1 },
+        expected: {
+          scoreHome: 0,
+          passAccuracy: null,
+          anchorRevision: 1,
+        },
       },
       {
         label: 'received-pass',
         time: 4,
         event: 'receive',
-        expected: { scoreHome: 0, passAccuracy: 100, anchorRevision: 1 },
+        expected: {
+          scoreHome: 0,
+          passAccuracy: 100,
+          anchorRevision: 1,
+        },
       },
       {
         label: 'goal-original',
         time: 8,
         event: 'shot',
-        expected: { scoreHome: 1, passAccuracy: 100, anchorRevision: 1 },
+        expected: {
+          scoreHome: 1,
+          passAccuracy: 100,
+          anchorRevision: 1,
+        },
       },
       {
         label: 'goal-corrected',
         time: 10,
         event: 'shot',
-        expected: { scoreHome: 1, passAccuracy: 100, anchorRevision: 2 },
+        expected: {
+          scoreHome: 1,
+          passAccuracy: 100,
+          anchorRevision: 2,
+        },
       },
-      { label: 'future-goal', time: 7, event: 'shot', expectedInvalid: true },
-      { label: 'before-first-event', time: 0, event: 'pass', expectedInvalid: true },
+      {
+        label: 'future-goal',
+        time: 7,
+        event: 'shot',
+        expectedInvalid: true,
+      },
+      {
+        label: 'before-first-event',
+        time: 0,
+        event: 'pass',
+        expectedInvalid: true,
+      },
     ].map((testCase) => ({
       ...testCase,
       id: `${fixture.kind}-${fixture.seed}-${testCase.label}`,
@@ -57,28 +86,44 @@ export function evaluationCases() {
       time: 22,
       event: 'pass',
       phase: 0,
-      expected: { scoreHome: 0, passAccuracy: null, anchorRevision: 1 },
+      expected: {
+        scoreHome: 0,
+        passAccuracy: null,
+        anchorRevision: 1,
+      },
     },
     {
       label: 'received-pass',
       time: 24,
       event: 'receive',
       phase: 0,
-      expected: { scoreHome: 0, passAccuracy: 100, anchorRevision: 1 },
+      expected: {
+        scoreHome: 0,
+        passAccuracy: 100,
+        anchorRevision: 1,
+      },
     },
     {
       label: 'goal-original',
       time: 29,
       event: 'shot',
       phase: 0,
-      expected: { scoreHome: 1, passAccuracy: 100, anchorRevision: 1 },
+      expected: {
+        scoreHome: 1,
+        passAccuracy: 100,
+        anchorRevision: 1,
+      },
     },
     {
       label: 'goal-corrected',
       time: 30,
       event: 'shot',
       phase: 0,
-      expected: { scoreHome: 1, passAccuracy: 100, anchorRevision: 2 },
+      expected: {
+        scoreHome: 1,
+        passAccuracy: 100,
+        anchorRevision: 2,
+      },
     },
     {
       label: 'segment-end',
@@ -99,7 +144,13 @@ export function evaluationCases() {
         eventCount: 50,
       },
     },
-    { label: 'delayed-shot', time: 28, event: 'shot', phase: 0, expectedInvalid: true },
+    {
+      label: 'delayed-shot',
+      time: 28,
+      event: 'shot',
+      phase: 0,
+      expectedInvalid: true,
+    },
   ].map((testCase) => ({
     ...testCase,
     id: `extended-2039-${testCase.label}`,
@@ -114,29 +165,20 @@ export function evaluationCases() {
   }));
   return [...short, ...extended];
 }
-
 export const evaluationAdapterIds = [
   'template',
   'single-call',
   'investigator-reviewer',
   'fact-selection',
 ];
-export function evaluationAdapters({
-  live = false,
-  local = false,
-  config,
-  fetcher = fetch,
-  localRunner,
-  adapter = null,
-} = {}) {
+export function evaluationAdapters(options = {}) {
+  const { live = false, config, fetcher = fetch, adapter = null } = options;
+  if (options.local)
+    throw new RangeError('Local AI is unsupported; explicitly select Azure with --live.');
   if (adapter !== null && !evaluationAdapterIds.includes(adapter))
     throw new RangeError('Choose a supported evaluation adapter.');
   const azureConfig =
-    local || !live || adapter === 'template'
-      ? null
-      : config === undefined
-        ? configuration()
-        : config;
+    !live || adapter === 'template' ? null : config === undefined ? configuration() : config;
   const adapters = [
     {
       id: 'template',
@@ -149,7 +191,10 @@ export function evaluationAdapters({
           claims: [
             {
               text: explanation.text,
-              evidence: explanation.evidence.map(({ id, revision }) => ({ id, revision })),
+              evidence: explanation.evidence.map(({ id, revision }) => ({
+                id,
+                revision,
+              })),
             },
           ],
           execution: {
@@ -164,50 +209,34 @@ export function evaluationAdapters({
     },
     {
       id: 'single-call',
-      skip: local
-        ? null
-        : !live
-          ? 'Live calls disabled.'
-          : !azureConfig
-            ? 'Azure is not configured.'
-            : null,
+      skip: !live ? 'Live calls disabled.' : !azureConfig ? 'Azure is not configured.' : null,
       run: (input) =>
-        local
-          ? generateLocalDraft(input, { runner: localRunner })
-          : generateDraft(input, { config: azureConfig, fetcher }),
+        generateDraft(input, {
+          config: azureConfig,
+          fetcher,
+        }),
     },
     {
       id: 'investigator-reviewer',
-      skip: local
-        ? null
-        : !live
-          ? 'Live calls disabled.'
-          : !azureConfig
-            ? 'Azure is not configured.'
-            : null,
+      skip: !live ? 'Live calls disabled.' : !azureConfig ? 'Azure is not configured.' : null,
       run: (input) =>
-        local
-          ? investigateLocally(input, { runner: localRunner })
-          : investigateWithAgents(input, { config: azureConfig, fetcher }),
+        investigateWithAgents(input, {
+          config: azureConfig,
+          fetcher,
+        }),
     },
     {
       id: 'fact-selection',
-      skip: local
-        ? null
-        : !live
-          ? 'Live calls disabled.'
-          : !azureConfig
-            ? 'Azure is not configured.'
-            : null,
+      skip: !live ? 'Live calls disabled.' : !azureConfig ? 'Azure is not configured.' : null,
       run: (input) =>
-        local
-          ? investigateLocalFactStory(input, { runner: localRunner })
-          : investigateFactStory(input, { config: azureConfig, fetcher }),
+        investigateFactStory(input, {
+          config: azureConfig,
+          fetcher,
+        }),
     },
   ];
   return adapter === null ? adapters : adapters.filter((candidate) => candidate.id === adapter);
 }
-
 function factChecks(testCase) {
   if (testCase.expectedInvalid) return null;
   const bundle = integratedMatch(testCase.input);
@@ -231,7 +260,6 @@ function factChecks(testCase) {
     if (Object.hasOwn(testCase.expected, key)) checks[key] = value === testCase.expected[key];
   return checks;
 }
-
 export async function runEvaluation({
   cases = evaluationCases(),
   adapters = evaluationAdapters(),
@@ -250,10 +278,19 @@ export async function runEvaluation({
           input: testCase.input,
           expectedInvalid: !!testCase.expectedInvalid,
           fixtureChecks: factChecks(testCase),
-          semanticReview: { status: 'pending-human-review', label: null, notes: null },
+          semanticReview: {
+            status: 'pending-human-review',
+            label: null,
+            notes: null,
+          },
         };
         if (adapter.skip) {
-          results.push({ ...row, status: 'skipped', reason: adapter.skip, elapsedMs: null });
+          results.push({
+            ...row,
+            status: 'skipped',
+            reason: adapter.skip,
+            elapsedMs: null,
+          });
           continue;
         }
         const start = performance.now();
@@ -302,7 +339,9 @@ export async function runEvaluation({
               'get_match_patterns',
             ].flatMap((name) => registry.execute(name, {}).references);
           }
-          const validated = validateDraft(output, { evidence });
+          const validated = validateDraft(output, {
+            evidence,
+          });
           results.push({
             ...row,
             status: 'draft',

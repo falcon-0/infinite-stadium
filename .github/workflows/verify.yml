@@ -50,7 +50,6 @@ jobs:
           python-version: "3.12"
 
       # The default application and packaging tools use standard libraries.
-      # The optional local AI SDK/runtime is intentionally not installed here.
       - name: Install pinned development formatter
         run: npm ci --ignore-scripts
 

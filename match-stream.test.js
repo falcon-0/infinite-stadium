@@ -370,7 +370,7 @@ test('withdrawal fixture is available through actual loopback match and SSE rout
     inferenceCalls++;
     throw new Error('This fixture check must not invoke inference.');
   };
-  const server = createServer({ env: {}, fetcher: forbidden, localRunner: forbidden });
+  const server = createServer({ env: {}, fetcher: forbidden });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(
