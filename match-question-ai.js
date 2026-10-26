@@ -11,7 +11,11 @@ export {
   sourceScopedSequenceFacts,
   endpointStoryExtraRequirements,
 } from './ai/composition-schema.js';
-import { explicitEventRelations, relativeKeeperWitnessPair } from './relative-event-planning.js';
+import {
+  explicitEventRelations,
+  relativeKeeperWitnessPair,
+  allowedRelativeEntityBindings,
+} from './relative-event-planning.js';
 import { linkedRecoveryContextFacts } from './question-linked-context.js';
 import { linkedActionCoveragePolicy } from './question-policies.js';
 import { resolvePlayerClarification } from './question-clarification-context.js';
@@ -86,7 +90,12 @@ import {
   footballKnowledgeVersion,
   retrieveFootballKnowledge,
 } from './football-knowledge.js';
-import { passQuerySelectionPermission, passQueryOutcomeAllowed } from './pass-query-permissions.js';
+import {
+  passQuerySelectionPermission,
+  passQueryOutcomeAllowed,
+  explicitCompletedPassCount,
+  bindExplicitCompletedPassCount,
+} from './pass-query-permissions.js';
 import { actionOutcome, checkActionEvidence } from './action-evidence.js';
 import { projectWriterFactCatalog, writerPacket } from './question-writer-packet.js';
 export {
@@ -104,6 +113,11 @@ import { pruneUncoveredCanonicalFacts } from './question-coverage-pruning.js';
 import { sourceSequenceLinks, sourceSequenceWitness } from './source-sequence-proof.js';
 import { canonicalObservedSequenceWitness } from './canonical-observed-sequence.js';
 import { emitQuestionDiagnostic } from './question-diagnostics.js';
+import { canonicalIdentityInventory } from './query-inventory-proof.js';
+import {
+  quantityPopulationSchema,
+  normalizeQuantityReviewPopulations,
+} from './quantity-review-contract.js';
 import { playerPickBasisRequest } from './player-pick-request.js';
 import { statisticDefinitionRequestScope } from './statistic-definition-request.js';
 import {
@@ -171,7 +185,7 @@ export function requestedQuantitySchema(components, roster, window = null) {
   const filterSchema = matchQueryDefinition.parameters.properties.filters.properties;
   return {
     description:
-      'Group by the requested population, not the number of question clauses. combined means one unfiltered match-wide total across all players and teams, with subjectIds empty. A named player or team count uses named-entity and its exact source ID, including a pronoun whose actor is stated in another clause or conversation. Do not turn he/she/his/her into an all-player total merely because the count clause omits the name. by-player is a separate count for each requested player, not a combined total; empty subjectIds requires complete player coverage.',
+      'Use null for a component that asks only for actor identities or a yes/no outcome, unless it explicitly asks for a count. Population grouping is about the requested numerical output: by-player subjectIds may contain only player IDs; a team restriction is a source filter, not a player ID. combined must have empty subjectIds. Group by the requested population, not the number of question clauses. combined means one unfiltered match-wide total across all players and teams, with subjectIds empty. A named player or team count uses named-entity and its exact source ID, including a pronoun whose actor is stated in another clause or conversation. Do not turn he/she/his/her into an all-player total merely because the count clause omits the name. by-player is a separate count for each requested player, not a combined total; empty subjectIds requires complete player coverage.',
     anyOf: Object.entries(states).map(([action, values]) => {
       const ids = [...teams, ...players];
       const fields =
@@ -214,18 +228,7 @@ export function requestedQuantitySchema(components, roster, window = null) {
         },
         action: { type: 'string', enum: [action] },
         state: { type: 'string', enum: values },
-        grouping: {
-          type: 'string',
-          enum: ['combined', 'by-team', 'by-player', 'named-entity'],
-          description:
-            'Population contract: combined is unfiltered across all players; named-entity is the explicit player/team, including a pronoun resolved from another clause; by-team/by-player require each requested entity separately.',
-        },
-        subjectIds: {
-          type: 'array',
-          minItems: 0,
-          maxItems: ids.length,
-          items: ids.length ? { type: 'string', enum: ids } : { type: 'string' },
-        },
+        population: quantityPopulationSchema(players),
         ...bounds,
         qualifiers: fields.length
           ? { anyOf: [{ type: 'null' }, strictObject(qualifiers)] }
@@ -536,7 +539,7 @@ function canonicalZeroQuantityAnswer(selection, packet) {
     )
   );
 }
-function canonicalScoreAnswer(selection, observedAt) {
+export function canonicalScoreAnswer(selection, observedAt) {
   const proofs = selection?.proofs || [];
   const currentGoals = (proof) =>
     proof?.metric === 'goals' &&
@@ -544,6 +547,55 @@ function canonicalScoreAnswer(selection, observedAt) {
     proof.timeTo === observedAt &&
     !proof.timeFromExclusive &&
     !proof.timeToExclusive;
+  // A complete unrestricted zero proves both sides have no confirmed goal.
+  // A positive combined total cannot determine either side's score.
+  if (
+    proofs.some(
+      (proof, index) =>
+        proof.kind === 'count' &&
+        proof.modelGenerated === false &&
+        proof.subjectId === null &&
+        proof.value === 0 &&
+        currentGoals(proof) &&
+        proof.query?.filters?.type === 'shot' &&
+        proof.query.filters.result === true &&
+        Object.keys(proof.query.filters).every((field) =>
+          ['type', 'result', 'outcome'].includes(field),
+        ) &&
+        (!proof.query.filters.outcome || proof.query.filters.outcome === 'goal') &&
+        proof.coverage?.missingFields &&
+        Object.values(proof.coverage.missingFields).every((n) => n === 0) &&
+        selection.claims[index]?.evidence.some((ref) => identity(ref) === identity(proof.scope)),
+    )
+  )
+    return true;
+  // Deduplication can replace the two zero-goal count claims with their
+  // source-built composite. Preserve its operand proofs instead of requiring
+  // the removed claims to be selected and reviewed a second time.
+  if (
+    proofs.some(
+      (proof, index) =>
+        proof.kind === 'confirmed-score' &&
+        proof.modelGenerated === false &&
+        proof.home === 0 &&
+        proof.away === 0 &&
+        proof.operands?.length === 2 &&
+        ['home', 'away'].every((side) =>
+          proof.operands.some(
+            (operand) =>
+              operand.kind === 'count' &&
+              operand.modelGenerated === false &&
+              operand.subjectId === side &&
+              operand.value === 0 &&
+              currentGoals(operand) &&
+              selection.claims[index]?.evidence.some(
+                (ref) => identity(ref) === identity(operand.scope),
+              ),
+          ),
+        ),
+    )
+  )
+    return true;
   // Other relevant facts (such as the scorer) do not invalidate a complete
   // score proof. Their relevance and support are checked independently.
   if (proofs.some((proof) => proof?.kind === 'team-comparison' && currentGoals(proof))) return true;
@@ -952,6 +1004,19 @@ export function requestedQuantityIssues(part, answer, packet, selection, operati
       continue;
     }
 
+    if (
+      demand.action === 'pass' &&
+      explicitCompletedPassCount({ question: packet.question }) &&
+      demand.state !== 'completed'
+    ) {
+      issues.push({
+        requestSpan: part.requestSpan,
+        requestedQuantity: demand,
+        reason:
+          'The question explicitly requests completed-pass quantities; pass attempts cannot substitute for completed passes.',
+      });
+      continue;
+    }
     const pendingAction = explicitPendingCountAction(part.requestSpan);
     if (pendingAction && (demand.action !== pendingAction || demand.state !== 'pending')) {
       issues.push({
@@ -1084,6 +1149,23 @@ export function requestedQuantityIssues(part, answer, packet, selection, operati
         op = operations?.[index];
       if (!claim) continue;
       const cited = (ref) => ref && claim.evidence.some((item) => identity(item) === identity(ref));
+      // Composite facts retain independently scoped operands. Each requested
+      // quantity is matched to its own operand, never to the composite window.
+      if (
+        proof?.modelGenerated === false &&
+        ['confirmed-score', 'window-count-comparison'].includes(proof.kind)
+      )
+        for (const operand of proof.operands || [])
+          if (
+            operand.kind === 'count' &&
+            operand.modelGenerated === false &&
+            operand.metric === metric &&
+            windowMatches(operand) &&
+            Number.isSafeInteger(operand.value) &&
+            operand.value >= 0 &&
+            cited(operand.scope)
+          )
+            atoms.push({ id: operand.subjectId, query: operand.query, scope: operand.scope });
       if (proof?.modelGenerated === false && windowMatches(proof)) {
         if (
           proof.kind === 'count' &&
@@ -1248,6 +1330,12 @@ export function requestedQuantityIssues(part, answer, packet, selection, operati
           );
         });
     }
+    if (
+      !covered &&
+      !explicitCountDemand(part.requestSpan || '') &&
+      canonicalIdentityInventory(part, answer, selection, packet, demand)
+    )
+      covered = true;
     if (!covered && rankedOutcomeInventory(part, answer, selection, packet, demand)) covered = true;
     if (!covered)
       issues.push({
@@ -2322,6 +2410,7 @@ export function reviewRequestAdequacy(
           checks,
           canonicalFactSelection,
           projectReviewEvidence(packet, matchOnlyAnswer(answer)),
+          packet,
         )
       )
         issues.push({
@@ -5418,9 +5507,9 @@ export async function answerMatchQuestionAI(
       };
       coverage.items.properties.relationEntityBinding = {
         type: 'string',
-        enum: ['none', 'same-team', 'same-player'],
+        enum: allowedRelativeEntityBindings({ ...input, queryRelations: request.queryRelations }),
         description:
-          'Identify any requested source-identity relation independently from the answer. Their side requires same-team; that player requires same-player.',
+          'Identify only a requested equality between the two action actors. A team qualifying the anchor shot does not require the subsequent collector to play for that team. Their side requires same-team; that player requires same-player. With no requested actor equality use none.',
       };
       const relativeRequested =
         /\b(?:after|afterward|afterwards|before|beforehand|following|preceding|next|then|subsequent|subsequently|previous|previously|earlier|later|después|antes|après|avant|ensuite|depois|após)\b|leading up|led to/iu.test(
@@ -7366,10 +7455,13 @@ export async function answerMatchQuestionAI(
           );
         try {
           for (const [queryIndex, query] of first.queries.entries()) {
-            const typedQuery = normalizeClubActorQuery(
-              structuredEnvelope ? omitUnusedQueryFields(query) : query,
-              packet.teams,
-              roster,
+            const typedQuery = bindExplicitCompletedPassCount(
+              input,
+              normalizeClubActorQuery(
+                structuredEnvelope ? omitUnusedQueryFields(query) : query,
+                packet.teams,
+                roster,
+              ),
             );
             const scopeCorrection = ordinalScopeCorrection(
               input.question,
@@ -9134,7 +9226,7 @@ export async function answerMatchQuestionAI(
     );
     let boundReview;
     try {
-      boundReview = resolveNumericReview(rawReview, checked, {
+      boundReview = resolveNumericReview(normalizeQuantityReviewPopulations(rawReview), checked, {
         canonicalIndices: [...canonicalIndices],
       });
     } catch (error) {
@@ -9280,6 +9372,7 @@ export async function answerMatchQuestionAI(
               relationChecks,
               factSelection,
               projectReviewEvidence(modelPacket, matchOnlyAnswer(checked)),
+              modelPacket,
             ),
         )
         .filter(Boolean);

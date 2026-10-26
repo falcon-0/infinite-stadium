@@ -65,3 +65,30 @@ export function relativeKeeperWitnessPair(manifest, relations) {
   if (holds.length !== 1 || anchors.length !== 1 || holds[0].id === anchors[0].id) return null;
   return [holds[0].id, anchors[0].id];
 }
+/** Bounded licenses for a requested equality relation, never an actor answer.
+ * Qualifying an anchor as a home/away shot does not require the later player
+ * to belong to that team. Deictic wording and executed relational lookups keep
+ * their broader review choices; source checks still validate every binding.
+ */
+export function allowedRelativeEntityBindings(input = {}) {
+  const text = String(input.question || '')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase();
+  const refs = Array.isArray(input.queryRelations) ? input.queryRelations : [];
+  const deictic =
+    /\b(?:their|theirs|his|her|hers|its|he|she|they|them|that player|this player|son|sa|ses|leur|leurs|il|elle|ils|elles|su|sus|el|ella|ellos|ellas|seu|sua|seus|suas|ele|ela|eles|elas)\b/u.test(
+      text,
+    );
+  const team =
+    deictic ||
+    refs.some((ref) => ref.sameTeam === true) ||
+    /\b(?:same (?:team|side|club)|that (?:team|side|club)|meme (?:equipe|club)|cette equipe|mism[oa] (?:equipo|club)|es[ea] equipo|mesm[ao] (?:equipa|equipe|time)|essa (?:equipa|equipe))\b/u.test(
+      text,
+    );
+  const player =
+    deictic ||
+    refs.some((ref) => ref.samePlayer === true) ||
+    /\b(?:same (?:player|person)|meme joueur|mismo jugador|mesmo jogador)\b/u.test(text);
+  return ['none', ...(team ? ['same-team'] : []), ...(player ? ['same-player'] : [])];
+}

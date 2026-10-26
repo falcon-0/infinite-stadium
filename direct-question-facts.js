@@ -1,3 +1,4 @@
+import { explicitEventRelations } from './relative-event-planning.js';
 const key = (ref) => `${ref?.type}:${ref?.id}@${ref?.revision}`;
 
 // The planner identifies the requested role; the application selects only an
@@ -26,8 +27,6 @@ export function directQuestionFacts(
       };
     return null;
   }
-  if (components !== 1 && !(components === 2 && focus === 'event-actor' && form === 'fact'))
-    return null;
   const derived = new Set((packet.queryRelations || []).map((link) => key(link.scopeReference)));
   const queries = (packet.requestedEvidence || []).filter(
     (source) => !derived.has(key(source.scopeReference)),
@@ -37,6 +36,33 @@ export function directQuestionFacts(
     composition: { mode: 'facts', factIds: [fact.id] },
     followUp: '',
   });
+  // Two complete same-population count windows already have an app-computed
+  // comparison. Skip a writer call only for this exact unique source pair;
+  // the independent semantic reviewer still checks the whole question.
+  if (
+    components >= 1 &&
+    components <= 2 &&
+    form === 'fact' &&
+    queries.length === 2 &&
+    queries.every(
+      (source) =>
+        ['count', 'by-team', 'by-player'].includes(source.query?.aggregate) &&
+        source.truncated === false,
+    )
+  ) {
+    const refs = new Set(queries.map((source) => key(source.scopeReference)));
+    const comparisons = manifest.facts.filter(
+      (fact) =>
+        fact.proof.kind === 'window-count-comparison' &&
+        fact.proof.modelGenerated === false &&
+        fact.proof.operands?.length === 2 &&
+        fact.proof.operands.every((operand) => refs.has(key(operand.scope))) &&
+        new Set(fact.proof.operands.map((operand) => key(operand.scope))).size === 2,
+    );
+    if (comparisons.length === 1) return result(comparisons[0]);
+  }
+  if (components !== 1 && !(components === 2 && focus === 'event-actor' && form === 'fact'))
+    return null;
   if (
     components === 1 &&
     focus === 'score' &&
@@ -202,7 +228,7 @@ export function directQuestionFacts(
     return null;
   const current = (fact) => fact.proof.eventId === row.id && fact.proof.revision === row.revision;
   let matches = [];
-  if (form === 'fact' && focus === 'event-actor')
+  if (form === 'fact' && focus === 'event-actor' && !explicitEventRelations(packet.question).length)
     matches = manifest.facts.filter(
       (fact) =>
         (fact.proof.kind === 'ordered-event' &&
