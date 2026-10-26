@@ -20,11 +20,11 @@ These are authored two-minute passages with fictional teams and players. There i
 | Render | Watch replay, synchronized statistics, short narratives and moment links |
 | Personalize | Audience detail, club preference and supported language content |
 
-## Intended category and Microsoft integration
+## Microsoft integration and prize fit
 
-The intended primary category is **Grand Prize: First Place**, the overall synthetic match-intelligence solution. The fan-focused Watch experience maps to ingestion, interpretation, explanation, rendering and personalization. This describes category fit, not a prize prediction or a category selection confirmed by the portal. The inspected project form exposes a challenge selection but no separate category selector.
+Azure OpenAI supplies hosted model inference. Our Node.js orchestration coordinates semantic planning, read-only match queries, source-backed answer composition and an independent model review. Current event revisions, captured timestamps, typed quantity proofs and bounded repairs keep answers connected to the available match evidence. Vercel hosts the application; Upstash persists access sessions and usage reservations.
 
-The live integration is Azure OpenAI, using an Azure-hosted model deployment and custom Node.js orchestration. Planning, composition and separate model review are application-managed stages. The submitted runtime does not claim Microsoft Foundry managed-agent orchestration, a production Microsoft Agent Framework integration or MCP integration. The optional local Agent Framework experiment is not required to run the submitted Watch app. Enterprise readiness and superiority over a simpler single-model workflow have not been established.
+The project addresses the overall match-intelligence challenge and its five-stage pipeline. The official rules distinguish overall Grand Prizes from four Category Prizes. An enterprise adoption path would build on the implemented access controls, usage limits and traceable evidence, starting with a controlled streaming pilot; production service commitments and measured adoption would need validation. The inspected portal has not confirmed a separate category selection. Category fit is not a claim of enterprise deployment or a prize prediction.
 
 ## Equal-weight judging criteria
 
@@ -38,6 +38,6 @@ Working code and selected checks support these claims. Internal reviews are not 
 - Source: https://github.com/falcon-0/infinite-stadium . The approved source cleanup is merged. Validate any later runtime changes before updating the published source or website.
 - Demo: [approved 118-second Watch-only video](https://youtu.be/Ay6WmVt-LIA), uploaded as Unlisted on October 25. The film includes actual app footage, captions, English translations of the French and Spanish examples, and credited sound effects. Some recorded response waits are shortened in the edit.
 - Availability: verify the configured Azure account, remaining credit and quota through the organizer's judging window.
-- Project page: the video URL is saved in the description, alongside the website and public repository. The title, tagline, keywords, description, challenge and Writing Code fields were checked on October 25. The outdated player-selection claim was removed. No final Submit action was clicked; the inspected portal exposed no separate final-submit control or confirmation, so final competition status must not be inferred from saving the description. No private judge-access field was found; credential delivery remains unresolved and the access code is not published here.
+- Project page: the video URL is saved in the description, alongside the website and public repository. The title, tagline, keywords, description, challenge and Writing Code fields were checked on October 26. The outdated player-selection claim was removed. No final Submit action was clicked; the inspected portal exposed no separate final-submit control or confirmation, so final competition status must not be inferred from saving the description. With owner approval, AI testing and unlock instructions were saved in the visible project description on October 26. The access code is not duplicated in this repository.
 
 See README, JUDGE_SETUP and EVALUATION_EVIDENCE for implementation and verification details. Do not claim a selectable-player control or fully translated interface without checking the actual current product.

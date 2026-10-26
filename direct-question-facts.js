@@ -36,6 +36,30 @@ export function directQuestionFacts(
     composition: { mode: 'facts', factIds: [fact.id] },
     followUp: '',
   });
+  // A formatting instruction may form a second text span without asking
+  // for a second action. Only one exact source-backed projected endpoint is
+  // eligible; independent semantic review still checks the full question.
+  if (
+    form === 'fact' &&
+    focus === 'event-actor' &&
+    queries.length === 1 &&
+    !explicitEventRelations(packet.question).length
+  ) {
+    const source = queries[0],
+      q = source.query;
+    if (q?.aggregate === 'list' && q.limit === 1 && source.rows?.length === 1) {
+      const row = source.rows[0];
+      const projected = manifest.facts.filter(
+        (f) =>
+          f.proof.kind === 'ordered-event' &&
+          f.proof.presentation?.modelGenerated === false &&
+          key(f.proof.scope) === key(source.scopeReference) &&
+          f.proof.event.eventId === row.id &&
+          f.proof.event.revision === row.revision,
+      );
+      if (projected.length === 1) return result(projected[0]);
+    }
+  }
   // Two complete same-population count windows already have an app-computed
   // comparison. Skip a writer call only for this exact unique source pair;
   // the independent semantic reviewer still checks the whole question.
