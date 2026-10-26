@@ -68,13 +68,14 @@ test('quantity wire factors action branches while runtime retains population con
     schema.anyOf.find((v) => v.properties.action.enum[0] === action).properties;
   assert.deepEqual(branch('recovery').state.enum, ['any']);
   assert.ok(!branch('pass').state.enum.includes('saved'));
-  assert.deepEqual(branch('shot').grouping.enum, [
-    'combined',
-    'by-team',
-    'by-player',
-    'named-entity',
-  ]);
-  assert.deepEqual(branch('shot').subjectIds.items.enum, ['home', 'away', 'home-1', 'away-10']);
+  const populations = branch('shot').population.anyOf;
+  assert.deepEqual(
+    populations.map((p) => p.properties.grouping.enum[0]),
+    ['combined', 'by-team', 'by-player', 'named-entity'],
+  );
+  assert.equal(populations[0].properties.subjectIds.maxItems, 0);
+  assert.deepEqual(populations[1].properties.subjectIds.items.enum, ['home', 'away']);
+  assert.deepEqual(populations[2].properties.subjectIds.items.enum, ['home-1', 'away-10']);
   assert.deepEqual(branch('recovery').qualifiers.anyOf[1].properties.bodyPart, { type: 'null' });
   assert.ok(
     branch('recovery').qualifiers.anyOf[1].properties.linkedShotOutcome.anyOf[0].enum.includes(

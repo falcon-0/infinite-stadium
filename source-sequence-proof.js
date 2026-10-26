@@ -1,3 +1,4 @@
+const key = (ref) => `${ref?.type}:${ref?.id}@${ref?.revision}`;
 // An explicit received link can identify an earlier action without displaying
 // that action as a redundant answer sentence. It proves sequence, never cause.
 export function sourceSequenceLinks(packet) {
@@ -47,7 +48,14 @@ export function sourceSequenceLinks(packet) {
       ];
     });
 }
-export function sourceSequenceWitness(part, answer, checks, selection, packet) {
+export function sourceSequenceWitness(
+  part,
+  answer,
+  checks,
+  selection,
+  packet,
+  sourcePacket = packet,
+) {
   const index = part.relationSourceLinkIndex;
   if (
     !Number.isInteger(index) ||
@@ -71,7 +79,14 @@ export function sourceSequenceWitness(part, answer, checks, selection, packet) {
   for (const claimIndex of part.claimIndices || []) {
     const proof = selection?.proofs?.[claimIndex],
       event =
-        proof?.kind === 'event' ? proof : proof?.kind === 'ordered-event' ? proof.event : null;
+        proof?.kind === 'event' ||
+        (proof?.kind === 'linked-goalkeeper-hold' &&
+          proof.modelGenerated === false &&
+          proof.linkBasis === 'explicit-cause')
+          ? proof
+          : proof?.kind === 'ordered-event'
+            ? proof.event
+            : null;
     if (
       !event ||
       event.eventId !== link.witness.id ||
@@ -96,6 +111,37 @@ export function sourceSequenceWitness(part, answer, checks, selection, packet) {
       )
     )
       continue;
+    if (proof.kind === 'linked-goalkeeper-hold') {
+      const ordered = proof.orderedShot;
+      // The reviewer projection removes scope rows. Validate ordered coverage against
+      // the authoritative packet, while keeping the reviewer link index unchanged.
+      const source = [
+        ...(sourcePacket.requestedEvidence || []),
+        ...(sourcePacket.queryResults || []),
+      ].find((source) => key(source.scopeReference) === key(ordered?.scope));
+      if (
+        record.recoveryKind !== 'goalkeeper-hold' ||
+        proof.holderId !== record.playerId ||
+        proof.shotId !== link.anchor.id ||
+        proof.shotRevision !== link.anchor.revision ||
+        proof.shotTime !== link.anchorTime ||
+        !ordered ||
+        ordered.modelGenerated !== false ||
+        ordered.event?.eventId !== link.anchor.id ||
+        ordered.event?.revision !== link.anchor.revision ||
+        ordered.event?.actionOutcome?.status !== 'saved' ||
+        !source ||
+        source.query?.aggregate !== 'list' ||
+        source.query.limit !== 1 ||
+        source.query.order !== ordered.order ||
+        JSON.stringify(source.query) !== JSON.stringify(ordered.query) ||
+        !source.rows?.some(
+          (row) => row.id === link.anchor.id && row.revision === link.anchor.revision,
+        ) ||
+        !answer.claims[claimIndex].evidence.some((ref) => key(ref) === key(ordered.scope))
+      )
+        continue;
+    }
     // Classified actions are checked separately by the existing coverage guard.
     if (!['recovery', 'ball-win', 'initial-control'].includes(part.requestedAction)) continue;
     return {

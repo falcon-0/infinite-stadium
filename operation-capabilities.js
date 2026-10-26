@@ -285,7 +285,16 @@ export function allowedOperationSubjects(input = {}) {
       'u',
     ).test(question) || namedTeams.length === 2;
   const difference = [];
-  if (teamComparison) difference.push(['home', 'away']);
+  // A single named side is not permission to invent the opponent as a
+  // comparison operand. Other comparisons remain available through queries.
+  if (
+    teamComparison &&
+    (namedTeams.length !== 1 ||
+      /\b(?:(?:both|each|either)\s+(?:teams?|sides?|clubs?)|les deux\s+(?:equipes?|clubs?)|ambos\s+(?:equipos?|clubes?)|ambas\s+equipes?|as duas\s+equipes?)\b/u.test(
+        question,
+      ))
+  )
+    difference.push(['home', 'away']);
   if (namedPlayers.length === 2) difference.push(namedPlayers);
   // A comparative follow-up can preserve the previous question's explicit scope.
   // No inherited subject is allowed when the new question names a different one.

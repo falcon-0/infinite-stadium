@@ -17,6 +17,25 @@ const broadening =
 const negative =
   /\b(?:not|never|isn't|wasn't|weren't|aren't|didn't|without|excluding|except|non|sans|sauf|sin|excepto|nao|sem)\b/u;
 
+/** A single explicit completion-count contract. Outcome questions about one
+ * selected pass, mixed outcome buckets and ratios remain outside this binding.
+ */
+export function explicitCompletedPassCount(input = {}) {
+  const text = normalize(input.question);
+  return (
+    passNoun.test(text) &&
+    /\b(?:more|fewer|less|how many|number|count|totals?|combien|plus|moins|cuantos|cuantas|mas|menos|quantos|quantas|mais)\b/u.test(
+      text,
+    ) &&
+    !broadening.test(text) &&
+    !negative.test(text) &&
+    !/\b(?:failed|unsuccessful|pending|unresolved|unsettled|awaiting|unconfirmed|accuracy|percentage|percent|ratio|rate|manque\w*|fallid\w*|pendiente\w*|pendente\w*|falhad\w*)\b/u.test(
+      text,
+    ) &&
+    allowedOperationMetrics(input).includes('completedPasses')
+  );
+}
+
 /** A bounded license for outcome filters when selecting/counting passes.
  * It does not infer answers, actors or outcomes. Unsupported qualifiers retain
  * the complete pass inventory; the planner must not silently choose a subset.
@@ -50,7 +69,11 @@ export function passQuerySelectionPermission(input = {}) {
     /^[¿?\s]*(?:was|were|is|are|did|does|has|had|est ce que|est|etait|a t il|fue|era|es|foi|era|o ultimo|a ultima)\b/u.test(
       current,
     );
-  if (broadening.test(topic) || negative.test(topic) || outcomeQuestion)
+  if (
+    broadening.test(topic) ||
+    negative.test(topic) ||
+    (outcomeQuestion && !explicitCompletedPassCount(input))
+  )
     return { constrained: true, results: [], outcomes: [] };
   const completed = allowedOperationMetrics({
     ...input,
@@ -85,4 +108,20 @@ export function passQueryOutcomeAllowed(input, query) {
     (!Object.hasOwn(filters, 'result') || permission.results.includes(filters.result)) &&
     (!Object.hasOwn(filters, 'outcome') || permission.outcomes.includes(filters.outcome))
   );
+}
+
+/** Bind the one explicit outcome for a proposed aggregate count. Supporting
+ * event lists, mixed-state questions and explicit conflicting filters remain
+ * unchanged and must pass the ordinary query/coverage checks.
+ */
+export function bindExplicitCompletedPassCount(input, query) {
+  if (
+    !explicitCompletedPassCount(input) ||
+    query?.filters?.type !== 'pass' ||
+    !['count', 'by-team', 'by-player'].includes(query.aggregate) ||
+    Object.hasOwn(query.filters, 'result') ||
+    Object.hasOwn(query.filters, 'outcome')
+  )
+    return query;
+  return { ...query, filters: { ...query.filters, result: true } };
 }

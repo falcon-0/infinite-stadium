@@ -252,6 +252,12 @@ function metric(q) {
   if (f.type === 'shot') {
     if (f.outcome === 'goal' && (f.result === undefined || f.result === true)) return 'goals';
     if (f.result === true && f.outcome === undefined) return 'goals';
+    // These settled outcome buckets already entail result:false. Keeping that
+    // explicit source predicate must not erase their metric or ordered proof.
+    if (f.result === false && ['saved', 'blocked', 'off-target'].includes(f.outcome))
+      return { saved: 'savedShots', blocked: 'blockedShots', 'off-target': 'offTargetShots' }[
+        f.outcome
+      ];
     if (f.result !== undefined) return null;
     return f.outcome === undefined
       ? 'attempts'
@@ -1467,6 +1473,50 @@ export function buildQuestionFacts(packet) {
       modelGenerated: false,
     });
   }
+  // Compare the same population across two explicitly requested windows.
+  // Counts and arithmetic come from complete source proofs, never writer prose.
+  const requestedScopes = new Set(
+    (packet.requestedEvidence || []).map((q) => key(q.scopeReference)),
+  );
+  const windowCounts = countFacts.filter((f) => requestedScopes.has(key(f.ref)));
+  for (let i = 0; i < windowCounts.length; i++)
+    for (let j = i + 1; j < windowCounts.length; j++) {
+      const left = windowCounts[i],
+        right = windowCounts[j],
+        a = left.proof,
+        b = right.proof;
+      if (
+        a.subjectId !== b.subjectId ||
+        a.metric !== b.metric ||
+        sameWindow(a, b) ||
+        json(a.query?.filters) !== json(b.query?.filters) ||
+        !units[language][a.metric]
+      )
+        continue;
+      const margin = Math.abs(a.value - b.value),
+        leader = a.value === b.value ? null : a.value > b.value ? 'first' : 'second';
+      const noun = (value) => units[language][a.metric][value === 1 ? 0 : 1];
+      const conclusion = {
+        en: `Difference: ${margin} ${noun(margin)}${leader ? ', more in the ' + leader + ' interval' : ', the intervals are level'}.`,
+        es: `Diferencia: ${margin} ${noun(margin)}${leader ? ', más en el ' + (leader === 'first' ? 'primer' : 'segundo') + ' intervalo' : ', los intervalos están igualados'}.`,
+        fr: `Écart : ${margin} ${noun(margin)}${leader ? ', davantage dans le ' + (leader === 'first' ? 'premier' : 'deuxième') + ' intervalle' : ', les intervalles sont à égalité'}.`,
+        pt: `Diferença: ${margin} ${noun(margin)}${leader ? ', mais no ' + (leader === 'first' ? 'primeiro' : 'segundo') + ' intervalo' : ', os intervalos estão empatados'}.`,
+      }[language];
+      add(
+        `${label(a.subjectId)}: ${windowText(a) || c.window(clock(a.timeFrom), clock(a.timeTo))}${a.value} ${noun(a.value)}; ${windowText(b) || c.window(clock(b.timeFrom), clock(b.timeTo))}${b.value} ${noun(b.value)}. ${conclusion}`,
+        [...new Map([left.ref, right.ref].map((ref) => [key(ref), ref])).values()],
+        {
+          kind: 'window-count-comparison',
+          metric: a.metric,
+          subjectId: a.subjectId,
+          operands: [a, b],
+          componentFactIds: [left.factId, right.factId],
+          margin,
+          leader,
+          modelGenerated: false,
+        },
+      );
+    }
   const rows = [...allQueries.flatMap((q) => q.rows || []), ...(packet.linkedContext?.rows || [])],
     latest = new Map(),
     conflicts = new Set();
@@ -1954,17 +2004,34 @@ export function buildQuestionFacts(packet) {
     );
     if (candidates.length !== 1) continue;
     const ordered = candidates[0];
+    const recoveryCandidates = facts.filter(
+      (fact) =>
+        fact.proof.kind === 'ordered-event' &&
+        fact.proof.modelGenerated === false &&
+        fact.proof.event?.eventType === 'recovery' &&
+        fact.proof.event?.eventId === hold.proof.eventId &&
+        fact.proof.event?.revision === hold.proof.revision &&
+        fact.proof.event?.playerId === hold.proof.holderId &&
+        fact.proof.event?.time === hold.proof.time &&
+        typeof fact.proof.displayQualifier === 'string',
+    );
+    const recovery = recoveryCandidates.length === 1 ? recoveryCandidates[0] : null;
     const before = facts.length;
     add(
-      `${ordered.proof.displayQualifier}: ${hold.claim.text}`,
+      `${ordered.proof.displayQualifier}${recovery ? `; ${recovery.proof.displayQualifier}` : ''}: ${hold.claim.text}`,
       [
         ...new Map(
-          [...hold.claim.evidence, ...ordered.claim.evidence].map((ref) => [key(ref), ref]),
+          [
+            ...hold.claim.evidence,
+            ...ordered.claim.evidence,
+            ...(recovery?.claim.evidence || []),
+          ].map((ref) => [key(ref), ref]),
         ).values(),
       ],
       {
         ...hold.proof,
         orderedShot: structuredClone(ordered.proof),
+        ...(recovery ? { orderedRecovery: structuredClone(recovery.proof) } : {}),
       },
     );
     if (facts.length > before) facts.splice(facts.indexOf(hold), 1);
@@ -2061,6 +2128,23 @@ export function selectQuestionFacts(manifest, ids) {
       return atom.claim.evidence.every((ref) =>
         composite.claim.evidence.some((other) => key(ref) === key(other)),
       );
+    if (
+      proof?.kind === 'linked-goalkeeper-hold' &&
+      proof.modelGenerated === false &&
+      proof.linkBasis === 'explicit-cause' &&
+      proof.orderedRecovery?.kind === 'ordered-event' &&
+      proof.orderedRecovery.modelGenerated === false &&
+      atom.proof?.kind === 'ordered-event' &&
+      json(proof.orderedRecovery) === json(atom.proof) &&
+      proof.orderedRecovery.event?.eventType === 'recovery' &&
+      proof.orderedRecovery.event?.eventId === proof.eventId &&
+      proof.orderedRecovery.event?.revision === proof.revision &&
+      proof.orderedRecovery.event?.playerId === proof.holderId &&
+      proof.orderedRecovery.event?.time === proof.time
+    )
+      return atom.claim.evidence.every((ref) =>
+        composite.claim.evidence.some((other) => key(ref) === key(other)),
+      );
     if (proof?.kind === 'player-count-ranking' && atom.proof?.kind === 'count') {
       const a = atom.proof,
         groups = proof.groups,
@@ -2104,6 +2188,44 @@ export function selectQuestionFacts(manifest, ids) {
         proof.measurementVersion === a.measurementVersion &&
         atom.claim.evidence.every((ref) =>
           composite.claim.evidence.some((other) => key(other) === key(ref)),
+        )
+      );
+    }
+    if (proof?.kind === 'window-count-comparison') {
+      const operands = proof.operands,
+        ids = proof.componentFactIds;
+      if (
+        proof.modelGenerated !== false ||
+        operands?.length !== 2 ||
+        ids?.length !== 2 ||
+        ids[0] === ids[1] ||
+        !operands.every(
+          (p) =>
+            p.kind === 'count' &&
+            p.modelGenerated === false &&
+            p.metric === proof.metric &&
+            p.subjectId === proof.subjectId &&
+            Number.isSafeInteger(p.value) &&
+            p.value >= 0 &&
+            composite.claim.evidence.some((ref) => key(ref) === key(p.scope)),
+        ) ||
+        sameWindow(operands[0], operands[1]) ||
+        json(operands[0].query?.filters) !== json(operands[1].query?.filters) ||
+        proof.margin !== Math.abs(operands[0].value - operands[1].value) ||
+        proof.leader !==
+          (operands[0].value === operands[1].value
+            ? null
+            : operands[0].value > operands[1].value
+              ? 'first'
+              : 'second')
+      )
+        return false;
+      const index = ids.indexOf(atom.id);
+      return (
+        index >= 0 &&
+        json(atom.proof) === json(operands[index]) &&
+        atom.claim.evidence.every((ref) =>
+          composite.claim.evidence.some((other) => key(ref) === key(other)),
         )
       );
     }
@@ -2238,6 +2360,36 @@ export function selectQuestionFacts(manifest, ids) {
       atom.proof?.kind !== 'count'
     )
       return false;
+    // Two proved zero team totals also subsume a separately selected complete
+    // unfiltered zero-goal total. This zero-only implication cannot derive a
+    // positive score partition or discard a narrower outcome/actor qualifier.
+    if (
+      atom.proof.metric === 'goals' &&
+      atom.proof.subjectId === null &&
+      atom.proof.value === 0 &&
+      atom.proof.modelGenerated === false &&
+      sameWindow(atom.proof, proof) &&
+      atom.proof.query?.filters?.type === 'shot' &&
+      atom.proof.query.filters.result === true &&
+      Object.keys(atom.proof.query.filters).every((k) =>
+        ['type', 'result', 'outcome'].includes(k),
+      ) &&
+      (!atom.proof.query.filters.outcome || atom.proof.query.filters.outcome === 'goal') &&
+      atom.proof.coverage?.missingFields &&
+      Object.values(atom.proof.coverage.missingFields).every((n) => n === 0) &&
+      atom.claim.evidence.some((ref) => key(ref) === key(atom.proof.scope)) &&
+      proof.operands.every(
+        (p, i) =>
+          p.kind === 'count' &&
+          p.metric === 'goals' &&
+          p.value === 0 &&
+          p.subjectId === ['home', 'away'][i] &&
+          p.modelGenerated === false &&
+          sameWindow(p, proof) &&
+          composite.claim.evidence.some((ref) => key(ref) === key(p.scope)),
+      )
+    )
+      return true;
     const index = proof.componentFactIds.indexOf(atom.id);
     if (index < 0) return false;
     return (
@@ -2278,7 +2430,11 @@ export function selectQuestionFacts(manifest, ids) {
           {
             removedFactId: fact.id,
             coveredByFactId: retainedCover(index).id,
-            reason: 'exact-composite-operand',
+            reason:
+              covering[index].proof.kind === 'confirmed-score' &&
+              !covering[index].proof.componentFactIds.includes(fact.id)
+                ? 'equivalent-complete-zero-goals'
+                : 'exact-composite-operand',
           },
         ]
       : [],

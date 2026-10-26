@@ -94,3 +94,33 @@ test('does not turn clock windows, incidental words or hypothetical acts into ev
     assert.deepEqual(explicitEventRelations(q), [], String(q));
   }
 });
+import { allowedRelativeEntityBindings } from './relative-event-planning.js';
+test('relative equality choices distinguish an anchor team from a requested shared actor', () => {
+  assert.deepEqual(
+    allowedRelativeEntityBindings({
+      question:
+        'Quem ficou com a bola depois do remate defendido mais recente da equipa visitante?',
+    }),
+    ['none'],
+  );
+  assert.deepEqual(
+    allowedRelativeEntityBindings({ question: 'Who recovered the ball after the away team shot?' }),
+    ['none'],
+  );
+  assert.ok(
+    allowedRelativeEntityBindings({
+      question: 'Who from the same team recovered the ball after the shot?',
+    }).includes('same-team'),
+  );
+  assert.ok(
+    allowedRelativeEntityBindings({ question: 'What did that player do after his shot?' }).includes(
+      'same-player',
+    ),
+  );
+  assert.ok(
+    allowedRelativeEntityBindings({
+      question: 'What came after the shot?',
+      queryRelations: [{ sameTeam: true }],
+    }).includes('same-team'),
+  );
+});
