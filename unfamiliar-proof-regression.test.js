@@ -457,7 +457,10 @@ test('ordered keeper composites preserve their source-linked sequence without tr
     false,
   );
 
-  assert.equal(directQuestionFacts(p, m, { form: 'fact', focus: 'event-actor' }), null);
+  assert.deepEqual(
+    directQuestionFacts(p, m, { form: 'fact', focus: 'event-actor' }).composition.factIds,
+    [f.id],
+  );
   for (const mutate of [
     (v) => v.proofs[0].shotRevision++,
     (v) => (v.proofs[0].holderId = 'away-10'),

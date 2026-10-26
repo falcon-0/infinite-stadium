@@ -3478,6 +3478,92 @@ const input = {
 };
 const config = { url: 'https://example.invalid/completions', deployment: 'test', key: 'test-only' };
 
+test('a same-team predecessor follow-up cannot release the planner latest-event shortcut', async () => {
+  const input = {
+    kind: 'duel',
+    seed: 1001,
+    time: 120,
+    language: 'fr',
+    question: 'Et le tir précédent de cette même équipe, à quel moment ?',
+    conversation: [
+      {
+        question: 'À quel moment l’équipe à domicile a-t-elle tenté son tir le plus récent ?',
+        answer: 'Je regarde les tirs.',
+        time: 120,
+      },
+    ],
+  };
+  const mock = sequenceTransport([
+    {
+      answerFocus: 'event-actor',
+      requestedForm: 'fact',
+      explanationTarget: 'none',
+      mentionedPlayers: [],
+      decision: {
+        kind: 'queries',
+        queries: [
+          { filters: { type: 'shot', team: 'home' }, aggregate: 'list', order: 'desc', limit: 1 },
+        ],
+      },
+    },
+    (packet) => {
+      assert.match(packet.answer.claims[0].text, /00:22/);
+      assert.ok(
+        packet.answer.claims[0].evidence.some((ref) => ref.id === 'comparison-duel-1001-shot-22'),
+      );
+      return {
+        decision: 'approve',
+        reason: 'The exact earlier event answers the time request.',
+        requestCheck: {
+          status: 'answered',
+          reason: 'The requested earlier action time is present.',
+          requestedInformation: input.question,
+          responseIntent: {
+            purpose: 'fact-retrieval',
+            reason: 'A time lookup.',
+            needsAssessment: false,
+            needsExplicitCorrection: false,
+            needsScoreline: false,
+            needsMeasurementLimitation: false,
+          },
+          coverage: [
+            {
+              requestSpan: requestComponents(input.question)[0],
+              claimIndices: [0],
+              answerForm: 'fact',
+              requestedAction: 'shot',
+              temporalRelation: 'before-requested-event',
+              relationAnchorClaimIndex: null,
+              relationSourceLinkIndex: null,
+              relationEntityBinding: 'same-team',
+              requestedQuantity: null,
+              explanationTarget: 'none',
+            },
+          ],
+        },
+        checks: [
+          {
+            claimIndex: 0,
+            supported: true,
+            inventedFacts: [],
+            actors: [],
+            counts: [],
+            reason: 'Verified predecessor event and bounded query.',
+            shotOutcomeAssertions: [],
+          },
+        ],
+      };
+    },
+  ]);
+  const answer = await answerMatchQuestionAI(input, { config, fetcher: mock.fetcher });
+  assert.equal(answer.execution.modelCalls, 2);
+  assert.equal(answer.claims.length, 1);
+  assert.match(answer.answer, /00:22/);
+  assert.ok(
+    answer.lookups.some((item) => item.query.timeTo === 92 && item.query.timeToExclusive === true),
+  );
+});
+
 const statisticDefinitionPlan = {
   answerFocus: 'other',
   explanationTarget: 'statistic-definition',

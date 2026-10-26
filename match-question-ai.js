@@ -16,6 +16,8 @@ import {
   explicitEventRelations,
   relativeKeeperWitnessPair,
   allowedRelativeEntityBindings,
+  sameTeamPredecessorQueries,
+  requiresSavedShotAnchor,
 } from './relative-event-planning.js';
 import { linkedRecoveryContextFacts } from './question-linked-context.js';
 import { linkedActionCoveragePolicy } from './question-policies.js';
@@ -2361,9 +2363,32 @@ export function reviewRequestAdequacy(
             part.requestedAnchorOrdinal === binding.anchorOrdinal.position &&
             (selectedRefs.has(identity(binding.scopeReference)) ||
               (binding.resultEvents || []).some((ref) => selectedRefs.has(identity(ref))));
+          const conversational =
+            packet.conversationSelector?.kind === 'same-team-predecessor' &&
+            packet.conversationSelector.modelGenerated === false &&
+            binding.relation === 'before' &&
+            binding.sameTeam === true &&
+            binding.query?.filters?.type === packet.conversationSelector.type &&
+            binding.query?.filters?.team === packet.conversationSelector.team &&
+            binding.anchorTeam === packet.conversationSelector.team &&
+            binding.query.order === 'desc' &&
+            binding.query.limit === 1 &&
+            binding.query.timeTo === binding.anchorTime &&
+            binding.query.timeToExclusive === true &&
+            binding.anchorTime <= packet.observedAt &&
+            (packet.requestedEvidence || []).some(
+              (source) =>
+                identity(source.scopeReference) === identity(binding.anchorScope) &&
+                source.query?.order === 'desc' &&
+                source.query?.limit === 1 &&
+                source.rows?.length === 1 &&
+                source.rows[0].id === binding.anchor.id &&
+                source.rows[0].revision === binding.anchor.revision,
+            );
           const internal =
             explicit ||
             ordinal ||
+            conversational ||
             (binding.anchorIdentifiedBy === 'requested-moment' &&
               packet.requestedMoment?.reference &&
               identity(packet.requestedMoment.reference) === identity(binding.anchor) &&
@@ -3455,7 +3480,7 @@ const canonicalReviewPolicy =
 FIRST fill responseIntent from the question and conversation: what response does this person seek? A contribution, effectiveness, relative-importance or influence question asks for an assessment even if phrased as yes/no and without the word opinion. Choose assessment or mixed and needsAssessment:true; listing metrics does not give a conclusion. A factual lookup asks for a recorded quantity, identity, attribute or outcome. Judge comparative alternatives together, not as isolated requests for two unrelated numbers. Decide this before looking for claims to credit.
 THEN assess the actual fan-facing response. Read answer.claims literally: never credit statistics or limitations that appear only in premiseCheck, available evidence or your own reasons. An assessment needs a concise qualified judgment tied to relevant observations; passes and ball wins alone do not measure possession, pressure, quality or decisive impact. A team-attacking assessment can be answered by a clearly qualified comparison on shooting activity in the requested window, including a tie. This does not assert measured pressing intensity or possession. Do not require an unasked pressing or possession disclaimer merely because the fan informally asks who is pushing more. An unavailable attribute needs an explicit limitation, alongside any independently known requested attribute. Set needsMeasurementLimitation:true ONLY when the fan explicitly requests a measurable attribute whose value is unavailable. Ordinary assessment uncertainty is not a request for a measurement; default this flag to false. An interpretation can include its reviewed uncertainty or correction within its single paragraph; do not demand a separate limitation claim. Do not penalize honest uncertainty as an invented fact. An explicit correction of a false premise needs a direct correction, not merely a different player's adjacent event. premiseCheck and your reasons are internal and cannot answer the fan. When correction is needed use needsExplicitCorrection:true, and require a fan-facing interpretation or limitation that states the correction without inventing why a nonexistent action occurred.
 Assign coverage only after intent. Include every exact requestComponents string once, with answerForm and claimIndices that actually fulfill it. Do not omit subquestions embedded in the full question. Keep actor, action, outcome filter and time interval exact. A full-match profile is not an extra answer to a narrow interval; an already supplied count is not a second requested fact. Irrelevant or redundant but true canonical claims should not receive coverage; if the needed answer is otherwise complete, approve with only necessary claim indices so the application can remove unused observations. Preserve observation dependencies needed for a covered interpretation. Do not credit unasked shooting statistics merely because a player is under discussion.
-For action coverage distinguish reception, classified ball win and initial control. For relative actions identify temporalRelation, relationAnchorClaimIndex and relationEntityBinding. When the question identifies a shot/pass and asks who collected the ball after it, select the matching sourceSequenceLinks index in relationSourceLinkIndex; the anchor need not be repeated as a displayed claim. Match the requested actor and clock to that anchor; never choose an unrelated link. Otherwise use relationSourceLinkIndex:null; an executed queryRelations lookup with anchorIdentifiedBy=requested-moment can keep its known requestedMoment anchor internal (relationAnchorClaimIndex:null); otherwise a canonical ordered anchor plus current later event proves only positive existence with the correct team/player and time, never absence, counts or causation. Absence needs a complete bounded scope. Use none/null for non-relative relations.
+For action coverage distinguish reception, classified ball win and initial control. For relative actions identify temporalRelation, relationAnchorClaimIndex and relationEntityBinding. When the question identifies a shot/pass and asks who collected the ball after it, select the matching sourceSequenceLinks index in relationSourceLinkIndex; the anchor need not be repeated as a displayed claim. Match the requested actor and clock to that anchor; never choose an unrelated link. Otherwise use relationSourceLinkIndex:null; an executed queryRelations lookup with anchorIdentifiedBy=requested-moment can keep its known requestedMoment anchor internal (relationAnchorClaimIndex:null); an application-bound conversationSelector of kind same-team-predecessor also keeps its executed latest anchor internal: use before-requested-event, same-team and relationAnchorClaimIndex:null for the earlier result, without repeating the anchor as another displayed claim; otherwise a canonical ordered anchor plus current later event proves only positive existence with the correct team/player and time, never absence, counts or causation. Absence needs a complete bounded scope. Use none/null for non-relative relations.
 Check every model-authored paragraph against its declared observations and evidence limits. Reject a comparison with a typical, average, normal or expected player when no benchmark is supplied. Reject prose that merely repeats selected counts; one concise application-rendered profile can answer an accuracy question without a repeated interpretation. Linked failed-pass/recovery events can establish sequence, not who forced a mistake, intentions, pressing, control or opportunity. A missing measurement cannot be estimated from a result or technique. General knowledge cannot prove match events. Do not treat the user's assumption or a statement of unavailable information as a positive invented assertion. Bind every supplied numeric assertionIndex exactly once to its cited complete scope/group; never rewrite its text/value. Extract actors only for model-authored factual assertions. A positive unsupported assertion must be in inventedFacts and supported:false, even if qualified elsewhere.
 A statistic that only indirectly relates to the topic does not answer a requested distinction. Keeper testing requires opposing shot outcomes or linked saves; ball wins cannot substitute. Coverage can cite only information actually present in the final answer, never relevant but unselected context. Do not approve a partial answer as useful when a requested component is missing. A contribution or assist question does not request the same-player temporal binding between the scorer and passer: use none unless the user asks for that identity relation.
 Return the required schema. status is not-answered if any requested form, distinction, correction or limitation is absent; withhold so the bounded repair can fix it. Otherwise use answered/corrected-premise/useful-limitation/clarification as appropriate. For canonical claims supported means source-proved, while coverage determines usefulness. Reject incomplete sentences or an unfinished conclusion; do not fill in what the writer might have intended. Never invent facts or stronger wording to justify an approval. Keep reasons concise; enforce language and provisional received-match status.`;
@@ -7341,6 +7366,16 @@ export async function answerMatchQuestionAI(
         throw new GenerationError(
           'I could not resolve the match evidence for that question. Please try again.',
         );
+      const predecessor = sameTeamPredecessorQueries(input, modelPacket.teams);
+      if (predecessor && !first.mentionedPlayers?.length) {
+        first = { draft: null, queries: predecessor.queries, mentionedPlayers: [] };
+        packet.conversationSelector = {
+          kind: 'same-team-predecessor',
+          type: predecessor.type,
+          team: predecessor.team,
+          modelGenerated: false,
+        };
+      }
       if (componentWindows.length) {
         if (first.operationPlan) bindComponentWindowQueries([], componentWindows);
         const bound = bindComponentWindowQueries(first.queries, componentWindows);
@@ -7684,6 +7719,35 @@ export async function answerMatchQuestionAI(
       }
       // Repair an incomplete event-relative plan before composing prose. Existing
       // ordered-source and independent coverage checks still prove the answer.
+      if (
+        !clarifyAmbiguousInput &&
+        !generalRoute &&
+        !operation?.proofs.length &&
+        requiresSavedShotAnchor(input.question) &&
+        !planned.some(
+          (source) =>
+            (source.query.filters?.type === 'shot' && source.query.filters?.outcome === 'saved') ||
+            (source.query.aggregate === 'list' &&
+              source.rows?.some(
+                (row) =>
+                  row.type === 'shot' && actionOutcome(sourceById.get(row.id)).status === 'saved',
+              )),
+        )
+      ) {
+        requireQueriesRoute = true;
+        const error = new GenerationError(
+          'Retrieve the requested saved-shot anchor before its collector.',
+          502,
+          'question-invalid-operation',
+        );
+        error.planningCorrection = {
+          kind: 'missing-saved-shot-anchor',
+          allowedRoutes: ['queries'],
+          instruction:
+            'Retrieve the saved SHOT named by the question, preserving its shooting team, ordinal and window. For the latest saved shot use type shot, outcome saved, descending order and limit one. The application retrieves its explicit collector link. A recovery with linkedShotOutcome saved alone does not establish the requested shot. The shooting team does not restrict the collector team. Do not add unrelated ball-win counts.',
+        };
+        throw error;
+      }
       const missingEventRelations = explicitEventRelations(input.question).filter(
         (demand) =>
           !queryRelations.some((binding) => binding.relation === demand.relation) &&

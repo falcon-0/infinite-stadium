@@ -36,6 +36,75 @@ export function directQuestionFacts(
     composition: { mode: 'facts', factIds: [fact.id] },
     followUp: '',
   });
+  // The explicit conversational grammar binds a latest anchor and its strictly
+  // earlier same-team lookup. Select only that dependent result, never the anchor.
+  const selector = packet.conversationSelector;
+  if (
+    selector?.kind === 'same-team-predecessor' &&
+    selector.modelGenerated === false &&
+    form === 'fact'
+  ) {
+    const relations = (packet.queryRelations || []).filter(
+      (link) =>
+        link.relation === 'before' &&
+        link.sameTeam === true &&
+        link.query?.filters?.type === selector.type &&
+        link.query?.filters?.team === selector.team,
+    );
+    if (relations.length === 1) {
+      const source = (packet.requestedEvidence || []).find(
+        (item) => key(item.scopeReference) === key(relations[0].scopeReference),
+      );
+      const row = source?.rows?.length === 1 ? source.rows[0] : null;
+      const matches =
+        row && source.query.order === 'desc' && source.query.limit === 1
+          ? manifest.facts.filter(
+              (fact) =>
+                fact.proof.kind === 'ordered-event' &&
+                fact.proof.modelGenerated === false &&
+                key(fact.proof.scope) === key(source.scopeReference) &&
+                fact.proof.event.eventId === row.id &&
+                fact.proof.event.revision === row.revision,
+            )
+          : [];
+      if (matches.length === 1) return result(matches[0]);
+    }
+    return null;
+  }
+  // A single linked-collector request already has a complete application fact.
+  // Its ordered shot proof must belong to an executed latest-saved-shot lookup.
+  // Skip only the writer; the independent semantic reviewer still runs.
+  if (
+    components === 1 &&
+    form === 'fact' &&
+    focus === 'event-actor' &&
+    explicitEventRelations(packet.question).length === 1
+  ) {
+    const shots = queries.filter(
+      (source) =>
+        source.query?.aggregate === 'list' &&
+        source.query.filters?.type === 'shot' &&
+        source.query.filters?.outcome === 'saved' &&
+        source.query.order === 'desc' &&
+        source.query.limit === 1 &&
+        source.rows?.length === 1,
+    );
+    if (shots.length === 1) {
+      const source = shots[0],
+        row = source.rows[0];
+      const matches = manifest.facts.filter(
+        (fact) =>
+          fact.proof.kind === 'linked-goalkeeper-hold' &&
+          fact.proof.modelGenerated === false &&
+          fact.proof.linkBasis === 'explicit-cause' &&
+          fact.proof.orderedShot?.modelGenerated === false &&
+          key(fact.proof.orderedShot.scope) === key(source.scopeReference) &&
+          fact.proof.shotId === row.id &&
+          fact.proof.shotRevision === row.revision,
+      );
+      if (matches.length === 1) return result(matches[0]);
+    }
+  }
   // A formatting instruction may form a second text span without asking
   // for a second action. Only one exact source-backed projected endpoint is
   // eligible; independent semantic review still checks the full question.
