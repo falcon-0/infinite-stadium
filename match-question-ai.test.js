@@ -6286,6 +6286,7 @@ test('the actual first wire chooses one plan and never asks for authored prose',
       if (call) return;
       const schema = body.response_format.json_schema.schema;
       assert.deepEqual(schema.required, [
+        'eventPresentation',
         'requestedSourceAttributes',
         'answerFocus',
         'explanationTarget',
@@ -9577,6 +9578,7 @@ test('provider schema prevents plain-text drafts and preserves independent cited
       const schema = format.json_schema.schema;
       if (!call) {
         assert.deepEqual(schema.required, [
+          'eventPresentation',
           'requestedSourceAttributes',
           'answerFocus',
           'explanationTarget',
@@ -22177,4 +22179,49 @@ test('embedded outcome attributes keep the open schema instead of an outcome-onl
         mode.properties.factIds?.maxItems > 3 || mode.properties.factIds?.items.enum?.length > 3,
     ),
   );
+});
+
+test('compact recipient contract survives actual seven-field planning and independent review in two calls', async () => {
+  const question = {
+    kind: 'quiet',
+    seed: 73,
+    time: 120,
+    language: 'pt',
+    question: 'Quem recebeu o último passe certo da equipa da casa? Só o nome e o minuto.',
+  };
+  let reviewed = false;
+  const mock = directTransport(
+    {
+      eventPresentation: { role: 'recipient', fields: ['name', 'time'] },
+      requestedSourceAttributes: null,
+      answerFocus: 'event-actor',
+      explanationTarget: 'none',
+      requestedForm: 'fact',
+      mentionedPlayers: [],
+      decision: {
+        kind: 'queries',
+        queries: [
+          {
+            filters: { type: 'pass', team: 'home', result: true },
+            aggregate: 'list',
+            order: 'desc',
+            limit: 1,
+            timeFrom: 0,
+            timeTo: 120,
+          },
+        ],
+      },
+    },
+    { decision: 'approve' },
+    (packet, call) => {
+      if (call === 1) {
+        reviewed = true;
+        assert.equal(packet.answer.claims[0].text, 'D. Hughes · 01:40.');
+      }
+    },
+  );
+  const result = await answerMatchQuestionAI(question, { config, fetcher: mock.fetcher });
+  assert.equal(result.answer, 'D. Hughes · 01:40.');
+  assert.equal(mock.count(), 2);
+  assert.equal(reviewed, true);
 });

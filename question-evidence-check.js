@@ -47,6 +47,7 @@ export function projectReviewEvidence(packet, answer) {
     'requestedForm',
     'explanationTarget',
     'answerFocus',
+    'eventPresentation',
     'previousQuestion',
     'conversation',
     'responseLanguage',

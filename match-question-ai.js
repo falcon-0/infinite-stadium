@@ -1,3 +1,4 @@
+import { eventPresentationSchema, normalizeEventPresentation } from './event-presentation.js';
 import { strictObject, referenceSchema, answerSchema } from './ai/answer-schema.js';
 import {
   compositionSchema,
@@ -1753,6 +1754,14 @@ function canonicalPassReception(index, answer, packet, selection, outcome) {
     claim = answer.claims?.[index];
   if (
     proof?.kind !== 'ordered-event' ||
+    (proof.presentation &&
+      (proof.presentation.modelGenerated !== false ||
+        proof.presentation.role !== 'recipient' ||
+        proof.presentation.playerId !== event?.recipient?.playerId ||
+        !normalizeEventPresentation({
+          role: proof.presentation.role,
+          fields: proof.presentation.fields,
+        }))) ||
     proof.modelGenerated !== false ||
     event?.kind !== 'event' ||
     event.modelGenerated !== false ||
@@ -2918,6 +2927,7 @@ export function sourceAttributeReviewBudget(existing, components, attributes) {
     : existing;
 }
 const firstAnswerSchema = strictObject({
+  eventPresentation: eventPresentationSchema,
   requestedSourceAttributes: sourceAttributeDemandSchema,
   answerFocus: {
     type: 'string',
@@ -2933,7 +2943,7 @@ const firstAnswerSchema = strictObject({
       'other',
     ],
     description:
-      'Identify the requested answer subject: score asks the scoreline and requires confirmed goals for BOTH teams, never a combined goal count; event-actor is who performed one action; credited-assist asks official assist credit; player-assessment asks for a standout or best-player pick; player-performance evaluates a particular player or role, including goalkeeper activity, and does not ask for a best-player pick; team-attacking-assessment asks which side is pushing, threatening or creating more attack; team-assessment covers other comparisons of sides; event-sequence asks how a move developed; other covers remaining questions. For credited assists inspect the goal shot and its explicit assist field, not a completed pass.',
+      'Subject: score requires confirmed goals for BOTH teams, never combined totals. event-actor identifies an action performer. credited-assist requires official credit on the goal shot, not a completed pass. player-assessment picks the standout; player-performance evaluates a particular player or keeper without choosing a winner. team-attacking-assessment compares attacking threat; team-assessment covers other team judgments. event-sequence explains a move; other covers remaining requests.',
   },
   explanationTarget: {
     type: 'string',
@@ -2952,7 +2962,7 @@ const firstAnswerSchema = strictObject({
     type: 'string',
     enum: ['fact', 'assessment', 'explanation'],
     description:
-      'Choose the form before evidence: fact asks identity, count or outcome, including next/before chronology; several factual parts remain fact, not a buildup explanation. assessment asks for an evaluative/comparative judgment, including who/yes-no, player picks with supporting reasons, workload, involvement or keeper activity. A pick’s reason is its recorded contribution: use explanationTarget other. explanation asks how a move developed or a football concept; actual action motives/alternatives use decision-rationale and a specific uncertainty.',
+      'fact: identities, counts, outcomes and before/next chronology, even with several factual parts. assessment: judgments, comparisons, player picks and their contribution-based reasons (explanationTarget other), workload or keeper activity. explanation: how a move developed or a football concept. Motives, alternatives and counterfactual choices require decision-rationale with explicit uncertainty.',
   },
   mentionedPlayers: {
     type: 'array',
@@ -4929,6 +4939,7 @@ export async function answerMatchQuestionAI(
     requestedForm = null,
     explanationTarget = null,
     answerFocus = null,
+    eventPresentation = null,
     pickBasisOnly = false;
   const usage = { promptTokens: 0, completionTokens: 0 },
     stages = [];
@@ -7019,6 +7030,12 @@ export async function answerMatchQuestionAI(
       if (first?.explanationTarget === 'causal-attribution') requestedForm = 'explanation';
       explanationTarget = first?.explanationTarget ?? null;
       answerFocus = first?.answerFocus ?? null;
+      eventPresentation =
+        requestedForm === 'fact' && answerFocus === 'event-actor'
+          ? normalizeEventPresentation(first?.eventPresentation)
+          : null;
+      delete packet.eventPresentation;
+      if (eventPresentation) packet.eventPresentation = eventPresentation;
       if (
         explanationTarget === 'statistic-definition' &&
         (asksActualMatchOccurrence(input.question) ||
@@ -7114,7 +7131,7 @@ export async function answerMatchQuestionAI(
             'question-invalid-operation',
           );
         if (
-          ![2, 3, 4, 5, 6].includes(Object.keys(first).length) ||
+          ![2, 3, 4, 5, 6, 7].includes(Object.keys(first).length) ||
           Object.keys(first).some(
             (key) =>
               ![
@@ -7124,8 +7141,11 @@ export async function answerMatchQuestionAI(
                 'mentionedPlayers',
                 'decision',
                 'requestedSourceAttributes',
+                'eventPresentation',
               ].includes(key),
           ) ||
+          (first.eventPresentation != null &&
+            !normalizeEventPresentation(first.eventPresentation)) ||
           (requestedForm !== null &&
             !['fact', 'assessment', 'explanation'].includes(requestedForm)) ||
           (answerFocus !== null &&
@@ -8337,6 +8357,7 @@ export async function answerMatchQuestionAI(
     if (exclusiveQueryRoute && modelPacket.roster) {
       matchFactManifest = buildQuestionFacts({
         ...modelPacket,
+        ...(eventPresentation ? { eventPresentation } : {}),
         ...(requestedForm ? { requestedForm } : {}),
         ...(explanationTarget ? { explanationTarget } : {}),
         ...(answerFocus ? { answerFocus } : {}),
@@ -8385,6 +8406,7 @@ export async function answerMatchQuestionAI(
         ...(requestedForm ? { requestedForm } : {}),
         ...(explanationTarget ? { explanationTarget } : {}),
         ...(answerFocus ? { answerFocus } : {}),
+        ...(eventPresentation ? { eventPresentation } : {}),
         matchFacts: matchFactManifest,
       };
     }

@@ -1,3 +1,4 @@
+import { presentEventFields } from './event-presentation.js';
 import { createHash } from 'node:crypto';
 import { actionOutcome } from './action-evidence.js';
 import { momentHeadline } from './viewer-copy.js';
@@ -1971,20 +1972,29 @@ export function buildQuestionFacts(packet) {
         pt: goal ? 'Último passe antes do gol' : 'Último passe antes do remate',
       }[language];
     }
-    add(`${prefix}: ${endpoint.text}`, [endpoint.ref, source.scopeReference], {
-      kind: 'ordered-event',
-      displayQualifier: prefix,
-      order,
-      metric: m,
-      subjectId: subject,
-      timeFrom: q.timeFrom,
-      timeTo: q.timeTo,
-      ...windowFlags(q),
-      query: q,
-      scope: source.scopeReference,
-      event: endpoint.proof,
-      modelGenerated: false,
-    });
+    const presentation =
+      packet.requestedForm === 'fact' && packet.answerFocus === 'event-actor'
+        ? presentEventFields(packet.eventPresentation, endpoint.proof, player)
+        : null;
+    add(
+      presentation?.text ?? `${prefix}: ${endpoint.text}`,
+      [endpoint.ref, source.scopeReference],
+      {
+        ...(presentation ? { presentation: presentation.proof } : {}),
+        kind: 'ordered-event',
+        displayQualifier: prefix,
+        order,
+        metric: m,
+        subjectId: subject,
+        timeFrom: q.timeFrom,
+        timeTo: q.timeTo,
+        ...windowFlags(q),
+        query: q,
+        scope: source.scopeReference,
+        event: endpoint.proof,
+        modelGenerated: false,
+      },
+    );
   }
   // A unique ordered saved-shot witness can share one source-built sentence
   // with its explicitly linked keeper collection. Preserve the order/window

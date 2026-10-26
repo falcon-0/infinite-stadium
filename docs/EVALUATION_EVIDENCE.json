@@ -1,101 +1,6 @@
 {
-  "schema": "infinite-stadium.public-evaluation-summary.v4",
+  "schema": "infinite-stadium.public-evaluation-summary.v5",
   "status": "Selected development evidence, not submission certification or organizer judging",
-  "currentRelease": {
-    "name": "October 25 replay transport and schema modules",
-    "date": "2026-10-25",
-    "sourceCommit": "189a1064cc842a01b05871d8d9efe604169b0516",
-    "production": {
-      "id": "dpl_GCENbA4wsZbwvZzh8NWDrPsCxdDH",
-      "url": "https://infinite-stadium-4289uo435-falcon-266e.vercel.app",
-      "productionUrl": "https://infinite-stadium-lime.vercel.app",
-      "readyState": "READY"
-    },
-    "releaseChecks": {
-      "passed": true,
-      "allEightGates": true,
-      "fullTests": {
-        "tests": 1412,
-        "pass": 1411,
-        "fail": 0,
-        "skipped": 1
-      },
-      "githubChecksPassed": 6
-    },
-    "transportComparison": {
-      "scope": "Controlled staging HTTP/2 identity, gzip, gzip, identity; one selected first event, zero model calls. Not a population latency estimate.",
-      "identityFirstEventMs": [
-        1528.0561,
-        1607.9155
-      ],
-      "gzipFirstEventMs": [
-        475.2217,
-        468.0807
-      ],
-      "gzipFirstEventWireBytes": 30882,
-      "decodedFirstEventBytes": 224639,
-      "allDecodedFirstFramesIdentical": true
-    },
-    "hostedBrowser": {
-      "scope": "Two staging Watch runs and one public production Watch run; no model calls.",
-      "stagingSeekApproxMs": [
-        632,
-        657
-      ],
-      "stagingHealthApproxMs": [
-        305,
-        287
-      ],
-      "publicFirstReceivedClockMs": 3920,
-      "publicSeekMs": 558,
-      "publicPlaybackAdvanced": true,
-      "pageErrors": []
-    },
-    "azureRegression": {
-      "scope": "One selected development regression, not an unfamiliar-question benchmark. Independently checked against received fixture events.",
-      "input": {
-        "kind": "sustained",
-        "seed": 17,
-        "time": 80,
-        "question": "Who’s had the most shots so far, and how did they turn out?",
-        "language": "en",
-        "conversation": [],
-        "audience": "newcomer",
-        "favoriteClub": null,
-        "favoritePlayer": null
-      },
-      "answer": "Both teams combined: A. Reed leads with 2 shots. A. Reed has a shot blocked at 01:14. Club: Northbridge. A. Reed shoots off target at 00:16. Club: Northbridge.",
-      "accepted": true,
-      "serverElapsedMs": 8423,
-      "browserApiElapsedMs": 8773,
-      "modelCalls": 3,
-      "repairs": 0,
-      "expected": {
-        "observedAt": 80,
-        "leaders": [
-          "A. Reed"
-        ],
-        "count": 2,
-        "outcomes": [
-          {
-            "id": "comparison-sustained-17-shot-16",
-            "revision": 1,
-            "player": "A. Reed",
-            "time": 16,
-            "outcome": "off-target"
-          },
-          {
-            "id": "comparison-sustained-17-shot-74",
-            "revision": 1,
-            "player": "A. Reed",
-            "time": 74,
-            "outcome": "blocked"
-          }
-        ]
-      }
-    },
-    "uiScope": "Current Watch interface and font unchanged. Schema extraction changes code ownership, not answer policy."
-  },
   "previousReleases": [
     {
       "name": "October 22 selected regression release",
@@ -270,5 +175,138 @@
     "The public browser check is one desktop journey, not broad device validation or representative fan research.",
     "The approved video is uploaded, but private judge access and final portal competition status remain separate delivery checks."
   ],
-  "reviewStatus": "No new organizer or internal score is claimed. No human fan study or comparative single-model evaluation was conducted."
+  "reviewStatus": "No new organizer or internal score is claimed. No human fan study or comparative single-model evaluation was conducted.",
+  "historicalRelease": {
+    "name": "October 25 replay transport and schema modules",
+    "date": "2026-10-25",
+    "sourceCommit": "189a1064cc842a01b05871d8d9efe604169b0516",
+    "production": {
+      "id": "dpl_GCENbA4wsZbwvZzh8NWDrPsCxdDH",
+      "url": "https://infinite-stadium-4289uo435-falcon-266e.vercel.app",
+      "productionUrl": "https://infinite-stadium-lime.vercel.app",
+      "readyState": "READY"
+    },
+    "releaseChecks": {
+      "passed": true,
+      "allEightGates": true,
+      "fullTests": {
+        "tests": 1412,
+        "pass": 1411,
+        "fail": 0,
+        "skipped": 1
+      },
+      "githubChecksPassed": 6
+    },
+    "transportComparison": {
+      "scope": "Controlled staging HTTP/2 identity, gzip, gzip, identity; one selected first event, zero model calls. Not a population latency estimate.",
+      "identityFirstEventMs": [
+        1528.0561,
+        1607.9155
+      ],
+      "gzipFirstEventMs": [
+        475.2217,
+        468.0807
+      ],
+      "gzipFirstEventWireBytes": 30882,
+      "decodedFirstEventBytes": 224639,
+      "allDecodedFirstFramesIdentical": true
+    },
+    "hostedBrowser": {
+      "scope": "Two staging Watch runs and one public production Watch run; no model calls.",
+      "stagingSeekApproxMs": [
+        632,
+        657
+      ],
+      "stagingHealthApproxMs": [
+        305,
+        287
+      ],
+      "publicFirstReceivedClockMs": 3920,
+      "publicSeekMs": 558,
+      "publicPlaybackAdvanced": true,
+      "pageErrors": []
+    },
+    "azureRegression": {
+      "scope": "One selected development regression, not an unfamiliar-question benchmark. Independently checked against received fixture events.",
+      "input": {
+        "kind": "sustained",
+        "seed": 17,
+        "time": 80,
+        "question": "Who’s had the most shots so far, and how did they turn out?",
+        "language": "en",
+        "conversation": [],
+        "audience": "newcomer",
+        "favoriteClub": null,
+        "favoritePlayer": null
+      },
+      "answer": "Both teams combined: A. Reed leads with 2 shots. A. Reed has a shot blocked at 01:14. Club: Northbridge. A. Reed shoots off target at 00:16. Club: Northbridge.",
+      "accepted": true,
+      "serverElapsedMs": 8423,
+      "browserApiElapsedMs": 8773,
+      "modelCalls": 3,
+      "repairs": 0,
+      "expected": {
+        "observedAt": 80,
+        "leaders": [
+          "A. Reed"
+        ],
+        "count": 2,
+        "outcomes": [
+          {
+            "id": "comparison-sustained-17-shot-16",
+            "revision": 1,
+            "player": "A. Reed",
+            "time": 16,
+            "outcome": "off-target"
+          },
+          {
+            "id": "comparison-sustained-17-shot-74",
+            "revision": 1,
+            "player": "A. Reed",
+            "time": 74,
+            "outcome": "blocked"
+          }
+        ]
+      }
+    },
+    "uiScope": "Current Watch interface and font unchanged. Schema extraction changes code ownership, not answer policy."
+  },
+  "latestVerifiedRuntime": {
+    "label": "Verified published snapshot before the October26 concise-field refinement",
+    "sourceCommit": "f3e05e9511af195d30b45477ff84000d07f4999e",
+    "productionId": "dpl_9AfQQtxDoMnXQWzyBBFNyeSv2iAt",
+    "date": "2026-10-25",
+    "releaseChecks": {
+      "allEightGates": true,
+      "testsPassed": 1426,
+      "skipped": 1,
+      "failed": 0,
+      "githubChecksPassed": 6
+    },
+    "selectedHostedRegression": {
+      "originalFirstOutcomes": {
+        "baselinePassed": 3,
+        "baselineTotal": 6,
+        "furtherHeldPassed": 1,
+        "furtherHeldTotal": 2
+      },
+      "developmentRetests": {
+        "semanticPassed": 8,
+        "total": 8,
+        "originalSixModelCallsBefore": 18,
+        "originalSixModelCallsAfter": 13
+      },
+      "finalKeeperDedupChecks": {
+        "passed": 2,
+        "total": 2,
+        "keeperServerMs": 7921,
+        "keeperModelCalls": 3
+      },
+      "limitations": [
+        "Selected development cases, not a random or external accuracy benchmark.",
+        "Retesting fixed questions does not turn first failures into fresh successes.",
+        "Correct Portuguese recipient/time answer still added passer and club detail; motivates the next refinement."
+      ]
+    }
+  }
 }
