@@ -1,6 +1,100 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { explicitEventRelations, relativeKeeperWitnessPair } from './relative-event-planning.js';
+import { sameTeamPredecessorQueries } from './relative-event-planning.js';
+import { requiresSavedShotAnchor } from './relative-event-planning.js';
+import { executeMatchQuery } from './match-query.js';
+import { matchState } from './match-stream.js';
+import { resolvePlannedRelation } from './match-question-ai.js';
+
+const predecessorInput = {
+  kind: 'duel',
+  seed: 1001,
+  time: 120,
+  question: 'Et le tir précédent de cette même équipe, à quel moment ?',
+  conversation: [
+    {
+      question: 'À quel moment l’équipe à domicile a-t-elle tenté son tir le plus récent ?',
+      time: 120,
+    },
+  ],
+};
+test('a saved-shot relation requires its shot anchor rather than only a recovery-outcome filter', () => {
+  for (const question of [
+    'Who collected the ball after the latest saved shot?',
+    'Qui a récupéré le ballon après le tir arrêté ?',
+    'Quem ficou com a bola depois do remate defendido mais recente?',
+    '¿Quién recogió el balón después del tiro atajado?',
+  ])
+    assert.equal(requiresSavedShotAnchor(question), true);
+  for (const question of [
+    'Who recovered the ball?',
+    'Who collected it after the goal?',
+    'Could he collect it after the saved shot?',
+    'How many saves has the keeper made?',
+  ])
+    assert.equal(requiresSavedShotAnchor(question), false);
+});
+test('explicit predecessor follow-ups bind the source event rather than the conversation pin', () => {
+  const plan = sameTeamPredecessorQueries(predecessorInput);
+  const scope = {
+    kind: predecessorInput.kind,
+    seed: predecessorInput.seed,
+    time: predecessorInput.time,
+  };
+  const first = executeMatchQuery(scope, plan.queries[0]);
+  assert.equal(first.rows[0].time, 92);
+  const state = matchState(predecessorInput);
+  const bound = resolvePlannedRelation(
+    plan.queries[1],
+    [first],
+    120,
+    [],
+    new Map(state.events.map((e) => [e.id, e])),
+  );
+  const previous = executeMatchQuery(scope, bound.query);
+  assert.equal(previous.rows[0].time, 22);
+  assert.equal(previous.rows[0].team, 'home');
+  assert.equal(bound.query.timeTo, 92);
+  assert.equal(bound.query.timeToExclusive, true);
+});
+test('the bounded predecessor grammar supports four languages without inheriting unknown restrictions', () => {
+  for (const [question, prior] of [
+    ['When was the previous shot for that same team?', 'When was the latest home shot?'],
+    [
+      'Et le tir précédent de cette même équipe, à quel moment ?',
+      'Quel moment pour le dernier tir à domicile?',
+    ],
+    [
+      '¿A qué hora fue el tiro anterior del mismo equipo?',
+      '¿Cuándo fue el último tiro del equipo local?',
+    ],
+    [
+      'Quando foi o remate anterior da mesma equipa?',
+      'Quando foi o último remate da equipa da casa?',
+    ],
+  ]) {
+    const plan = sameTeamPredecessorQueries({
+      ...predecessorInput,
+      question,
+      conversation: [{ question: prior, time: 120 }],
+    });
+    assert.equal(plan?.team, 'home');
+    assert.equal(plan?.queries[1].relativeTo.relation, 'before');
+  }
+  for (const patch of [
+    { conversation: [] },
+    { question: 'When was the previous shot for that same team and who assisted?' },
+    { question: 'When was the previous shot for that same team by Cole?' },
+    { conversation: [{ question: 'When was the latest saved home shot?', time: 120 }] },
+    { conversation: [{ question: 'When was the latest home shot by Cole?', time: 120 }] },
+    { conversation: [{ question: 'When was the latest left-footed home shot?', time: 120 }] },
+    { conversation: [{ question: 'When was the latest home shot before 01:00?', time: 120 }] },
+    { conversation: [{ question: 'When was the latest home and away shot?', time: 120 }] },
+    { conversation: [{ question: 'When was the latest home shot?', time: 121 }] },
+  ])
+    assert.equal(sameTeamPredecessorQueries({ ...predecessorInput, ...patch }), null);
+});
 
 function witnesses() {
   return {

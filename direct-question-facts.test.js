@@ -4,6 +4,54 @@ import { matchState } from './match-stream.js';
 import { buildQuestionFacts } from './question-facts.js';
 import { directQuestionFacts } from './direct-question-facts.js';
 
+test('one proved latest saved-shot collector skips composition without selecting unrelated counts', () => {
+  const source = {
+    query: {
+      filters: { type: 'shot', outcome: 'saved', team: 'away' },
+      aggregate: 'list',
+      order: 'desc',
+      limit: 1,
+    },
+    scopeReference: { type: 'scope', id: 'latest-shot', revision: 1 },
+    rows: [{ id: 's', revision: 2 }],
+  };
+  const packet = {
+    question: 'Who collected the ball after the latest saved shot?',
+    observedAt: 120,
+    requestComponents: ['Who collected the ball after the latest saved shot?'],
+    requestedEvidence: [source],
+  };
+  const hold = {
+    id: 'hold',
+    proof: {
+      kind: 'linked-goalkeeper-hold',
+      modelGenerated: false,
+      linkBasis: 'explicit-cause',
+      shotId: 's',
+      shotRevision: 2,
+      orderedShot: { modelGenerated: false, scope: source.scopeReference },
+    },
+  };
+  const manifest = { facts: [hold, { id: 'unasked-count', proof: { kind: 'count' } }] };
+  const options = { focus: 'event-actor', form: 'fact' };
+  assert.deepEqual(directQuestionFacts(packet, manifest, options).composition.factIds, ['hold']);
+  for (const mutate of [
+    (p) => {
+      p.requestComponents.push('How many shots were there?');
+    },
+    (p) => {
+      p.requestedEvidence[0].query.order = 'asc';
+    },
+    (p) => {
+      p.requestedEvidence[0].rows[0].revision = 1;
+    },
+  ]) {
+    const changed = structuredClone(packet);
+    mutate(changed);
+    assert.equal(directQuestionFacts(changed, manifest, options), null);
+  }
+});
+
 function fixture() {
   const state = matchState({ kind: 'counter', seed: 1041, time: 118 }),
     goal = state.events.find((row) => row.type === 'shot' && row.result === true);
