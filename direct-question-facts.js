@@ -129,6 +129,46 @@ export function directQuestionFacts(
       if (projected.length === 1) return result(projected[0]);
     }
   }
+  // Complete by-team queries already have a proved leader/tie in each window.
+  // Selecting those two facts saves a writer call without merging intervals.
+  if (
+    form === 'fact' &&
+    components >= 1 &&
+    components <= 2 &&
+    queries.length === 2 &&
+    queries.every(
+      (source) =>
+        source.query?.aggregate === 'by-team' &&
+        !source.query.filters?.team &&
+        source.truncated === false,
+    )
+  ) {
+    const comparisons = queries.map((source) =>
+      manifest.facts.filter(
+        (fact) =>
+          fact.proof.kind === 'team-comparison' &&
+          fact.proof.modelGenerated === false &&
+          fact.proof.operands?.length === 2 &&
+          fact.proof.operands.every(
+            (operand) => key(operand.scope) === key(source.scopeReference),
+          ) &&
+          fact.proof.timeFrom === source.query.timeFrom &&
+          fact.proof.timeTo === source.query.timeTo &&
+          !!fact.proof.timeFromExclusive === !!source.query.timeFromExclusive &&
+          !!fact.proof.timeToExclusive === !!source.query.timeToExclusive,
+      ),
+    );
+    if (
+      comparisons.every((facts) => facts.length === 1) &&
+      comparisons[0][0].proof.metric === comparisons[1][0].proof.metric &&
+      comparisons[0][0].id !== comparisons[1][0].id
+    )
+      return {
+        scope: 'match',
+        composition: { mode: 'facts', factIds: comparisons.map((facts) => facts[0].id) },
+        followUp: '',
+      };
+  }
   // Two complete same-population count windows already have an app-computed
   // comparison. Skip a writer call only for this exact unique source pair;
   // the independent semantic reviewer still checks the whole question.
@@ -161,6 +201,8 @@ export function directQuestionFacts(
     focus === 'score' &&
     form === 'fact' &&
     queries.length &&
+    // Event lists answer individual-action requests, not just score totals.
+    queries.every((source) => source.query?.aggregate !== 'list') &&
     queries.every(
       (source) =>
         source.query?.timeFrom === 0 &&
@@ -313,10 +355,16 @@ export function directQuestionFacts(
   }
   if (components === 2 && !['left-foot', 'right-foot', 'head'].includes(q?.filters?.bodyPart))
     return null;
+  const completeSingle =
+    source.count === 1 &&
+    source.truncated === false &&
+    source.scope?.missingFields &&
+    Object.values(source.scope.missingFields).every((value) => value === 0) &&
+    Object.values(source.entityResolution || {}).every((entity) => entity.status === 'resolved');
   if (
     q?.aggregate !== 'list' ||
     source.rows?.length !== 1 ||
-    !(q.filters?.id === row.id || q.limit === 1)
+    !(q.filters?.id === row.id || q.limit === 1 || completeSingle)
   )
     return null;
   const current = (fact) => fact.proof.eventId === row.id && fact.proof.revision === row.revision;
@@ -330,7 +378,7 @@ export function directQuestionFacts(
           fact.proof.event?.revision === row.revision) ||
         (fact.proof.kind === 'event' &&
           !fact.proof.attributes &&
-          q.filters?.id === row.id &&
+          (q.filters?.id === row.id || completeSingle) &&
           current(fact)),
     );
   else if (form === 'fact' && focus === 'credited-assist')
@@ -341,6 +389,13 @@ export function directQuestionFacts(
     matches = manifest.facts.filter(
       (fact) => fact.proof.kind === 'linked-goal-sequence' && current(fact),
     );
+  // A complete one-event lookup can expose both its generic event fact and
+  // its stronger ordered projection. They prove the same action, not two
+  // competing answers; retain the ordered projection when available.
+  if (matches.length > 1 && focus === 'event-actor') {
+    const ordered = matches.filter((fact) => fact.proof.kind === 'ordered-event');
+    if (ordered.length === 1) matches = ordered;
+  }
   if (matches.length !== 1) return null;
   return result(matches[0]);
 }

@@ -4,6 +4,75 @@ import { matchState } from './match-stream.js';
 import { buildQuestionFacts } from './question-facts.js';
 import { directQuestionFacts } from './direct-question-facts.js';
 
+test('a goal-event lookup cannot be short-circuited into team score totals', () => {
+  const packet = {
+    question: 'Who scored and when?',
+    observedAt: 120,
+    requestComponents: ['Who scored and when?'],
+    requestedEvidence: [
+      {
+        query: {
+          aggregate: 'list',
+          filters: { type: 'shot', outcome: 'goal' },
+          timeFrom: 0,
+          timeTo: 120,
+        },
+        scopeReference: { type: 'scope', id: 'goals', revision: 1 },
+        rows: [{ id: 'goal', revision: 1, time: 116 }],
+      },
+    ],
+  };
+  const facts = ['home', 'away'].map((subjectId, index) => ({
+    id: 'score-' + subjectId,
+    proof: { kind: 'count', metric: 'goals', subjectId, timeFrom: 0, timeTo: 120 },
+    claim: { text: `${subjectId}: ${index ? 0 : 1} goals`, kind: 'observation' },
+  }));
+  assert.equal(directQuestionFacts(packet, { facts }, { focus: 'score', form: 'fact' }), null);
+});
+
+test('two team-comparison windows retain both scopes and skip redundant composition', () => {
+  const queries = [0, 60].map((timeFrom, index) => ({
+    scopeReference: { type: 'scope', id: 'window-' + index, revision: 1 },
+    query: {
+      aggregate: 'by-team',
+      filters: { type: 'shot' },
+      timeFrom,
+      timeTo: timeFrom + 60,
+      timeToExclusive: true,
+    },
+    truncated: false,
+  }));
+  const facts = queries.map((source, index) => ({
+    id: 'comparison-' + index,
+    proof: {
+      kind: 'team-comparison',
+      modelGenerated: false,
+      metric: 'attempts',
+      timeFrom: source.query.timeFrom,
+      timeTo: source.query.timeTo,
+      timeToExclusive: true,
+      operands: ['home', 'away'].map((subjectId) => ({ subjectId, scope: source.scopeReference })),
+    },
+  }));
+  const packet = {
+    requestComponents: ['Compare the two minutes', 'Which team had more shots in each'],
+    requestedEvidence: queries,
+  };
+  assert.deepEqual(
+    directQuestionFacts(packet, { facts }, { form: 'fact' }).composition.factIds,
+    facts.map((f) => f.id),
+  );
+  for (const mutate of [
+    (p) => (p.requestedEvidence[1].truncated = true),
+    (p) => (p.requestedEvidence[1].query.timeToExclusive = false),
+    (p) => (p.requestedEvidence[1].query.filters.team = 'home'),
+  ]) {
+    const changed = structuredClone(packet);
+    mutate(changed);
+    assert.equal(directQuestionFacts(changed, { facts }, { form: 'fact' }), null);
+  }
+});
+
 test('one proved latest saved-shot collector skips composition without selecting unrelated counts', () => {
   const source = {
     query: {
@@ -86,6 +155,32 @@ function fixture() {
     },
   };
 }
+
+test('one complete matching event answers actor/time without adding assist or technique', () => {
+  const { packet } = fixture();
+  packet.question = 'Who scored and when?';
+  packet.requestComponents = [packet.question];
+  packet.requestedEvidence[0].query.limit = 10;
+  packet.requestedEvidence[0].truncated = false;
+  const manifest = buildQuestionFacts(packet);
+  const answer = directQuestionFacts(packet, manifest, { focus: 'event-actor', form: 'fact' });
+  assert.equal(answer.composition.factIds.length, 1);
+  const selected = manifest.facts.find((f) => f.id === answer.composition.factIds[0]);
+  assert.equal(selected.proof.kind, 'event');
+  assert.match(selected.claim.text, /A\. Reed.*01:56/);
+  for (const change of [
+    (s) => (s.truncated = true),
+    (s) => (s.count = 2),
+    (s) => (s.scope.missingFields.player = 1),
+  ]) {
+    const bad = structuredClone(packet);
+    change(bad.requestedEvidence[0]);
+    assert.equal(
+      directQuestionFacts(bad, buildQuestionFacts(bad), { focus: 'event-actor', form: 'fact' }),
+      null,
+    );
+  }
+});
 test('direct actor, official assist and linked buildup use unique existing proofs', () => {
   const { packet } = fixture(),
     manifest = buildQuestionFacts(packet);

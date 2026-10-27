@@ -235,8 +235,9 @@ const accessPanel = document.createElement('details');
 accessPanel.id = 'unified-access';
 accessPanel.className = 'ai-access';
 accessPanel.hidden = true;
+accessPanel.open = true;
 accessPanel.innerHTML =
-  '<summary>Enable AI access</summary><form id="unified-access-form"><label for="unified-access-code">Project access code</label><input id="unified-access-code" type="password" autocomplete="off" maxlength="512" required><button type="submit" class="secondary">Unlock AI</button><p class="disclosure">The code stays out of browser storage. Access expires after one hour.</p></form>';
+  '<summary>Enable AI access</summary><form id="unified-access-form"><p>Enter the demo access code from the project description to ask the AI.</p><label for="unified-access-code">Project access code</label><input id="unified-access-code" type="password" autocomplete="off" maxlength="512" required><button type="submit" class="secondary">Unlock AI</button><p class="disclosure">The code stays out of browser storage. Access expires after one hour.</p></form>';
 lab.querySelector('.ai-controls').append(accessPanel);
 const lockAccess = document.createElement('button');
 lockAccess.id = 'unified-lock-access';
@@ -2225,6 +2226,15 @@ $('kind').onchange = () => {
 for (const id of ['audience', 'language', 'club', 'player'])
   $(id).onchange = () => {
     if (!developerView && !studioView) {
+      if (id === 'language') {
+        // A visible language selection is effective immediately. Keep other
+        // draft viewing choices separate until the viewer applies them.
+        appliedViewerProfile = { ...appliedViewerProfile, language: $('language').value };
+        saveViewerPreferences(preferenceStorage(), appliedViewerProfile);
+        preferencesStatus.textContent = 'Language updated for new answers, insights and recaps.';
+        connect(state.time, playing, { preserveMatch: true });
+        return;
+      }
       updateProfileLabel();
       preferencesStatus.textContent = 'Apply your changes when ready.';
       return;
