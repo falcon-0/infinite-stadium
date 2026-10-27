@@ -2968,7 +2968,7 @@ const firstAnswerSchema = strictObject({
       'other',
     ],
     description:
-      'Subject: score requires confirmed goals for BOTH teams, never combined totals. event-actor identifies an action performer. credited-assist requires official credit on the goal shot, not a completed pass. player-assessment picks the standout; player-performance evaluates a particular player or keeper without choosing a winner. team-attacking-assessment compares attacking threat; team-assessment covers other team judgments. event-sequence explains a move; other covers remaining requests.',
+      'Subject: score means current two-team goal totals, NOT who scored or when. event-actor identifies a performer, including a goalscorer; set eventPresentation to the requested name/time fields. credited-assist needs explicit goal assist credit, not a pass. player-assessment chooses a standout; player-performance evaluates a named player or keeper. team-attacking-assessment compares threat; team-assessment covers other team judgments. event-sequence explains a move; other covers remaining requests.',
   },
   explanationTarget: {
     type: 'string',

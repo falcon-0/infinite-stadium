@@ -206,16 +206,19 @@ test(
         .selectOption(roster.find((player) => player.id !== inactive.id).name);
       await page.getByRole('combobox', { name: 'Favorite club', exact: true }).selectOption('away');
       await page.getByRole('combobox', { name: 'Match view', exact: true }).selectOption('analyst');
-      await summary.click(); // Closing the drawer cancels unapplied changes.
+      await summary.click(); // Other viewing choices remain staged; language is immediate.
       await page.waitForFunction(
         (name) =>
           document.querySelector('#unified-player').value === name &&
           document.querySelector('#unified-audience').value === 'player',
         inactive.name,
       );
-      assert.equal(await page.locator('#unified-language').inputValue(), 'en');
+      assert.equal(await page.locator('#unified-language').inputValue(), 'es');
       assert.equal(await page.locator('#unified-club').inputValue(), '');
-      assert.deepEqual(await readSaved(), saved);
+      assert.deepEqual(await readSaved(), {
+        ...saved,
+        preferences: { ...saved.preferences, language: 'es' },
+      });
       assert.equal(
         await spotlight.locator('.player-follow-heading strong').textContent(),
         inactive.name,
@@ -235,11 +238,16 @@ test(
         );
         assert.equal(await page.locator('#unified-language-help').isVisible(), true);
         await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption(language);
-        await page.getByRole('button', { name: 'Apply view', exact: true }).click();
         await page.waitForFunction(
           (language) => document.querySelector('.watch-stats').lang === language,
           language,
         );
+        assert.equal(
+          (await readSaved()).preferences.language,
+          language,
+          'Language applies immediately without requiring Apply view',
+        );
+        await page.getByRole('button', { name: 'Apply view', exact: true }).click();
         assert.equal(await page.locator('.watch-stats tbody th').first().textContent(), shotLabel);
         assert.equal((await readSaved()).preferences.language, language);
         assert.equal(

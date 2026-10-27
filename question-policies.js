@@ -230,6 +230,7 @@ export const reviewerPolicy = [
 ].join('');
 
 export const exclusivePlanningPolicy = [
+  'For a team comparison across separate time intervals, use exactly one aggregate:"by-team" query per interval, filters.team:null, limit:2. This retrieves both teams including zero counts within the three-query budget. Do not fetch home and away separately or omit a team from the later interval. First elapsed minute means [0,60), second [60,120); use exclusive upper bounds and never whole-match totals. A preceding comparison sentence scopes the following question. ',
   'Plan evidence only. Use the fewest filters the actual question licenses. Nullable subtype ',
   'filters stay null unless the question specifically requests that subtype: a general ball win ',
   'must not become loose-ball or goalkeeper-hold, and an interception must not become a saved-shot ',
@@ -283,7 +284,7 @@ export const exclusivePlanningPolicy = [
   'explain that law. The next stage renders the selected rule facts with no match context.\nChoose ',
   "decision kind operation only when its typed operations completely answer the user's requested ",
   'facts. Use the exact allowed metric, canonical roster/team IDs and requested received-time ',
-  'window. Global orderedEndpoints use subjects:[]; one team/player scope uses one ID. difference ',
+  'window. When comparing consecutive elapsed minutes, the first minute is [0,60), the second is [60,120), and so on; bind each requested interval independently with exclusive upper bounds, clipped to received time. A leading comparison instruction supplies scope to its following question, not a separate demand for commentary. For team comparisons across intervals use one aggregate:"by-team" query per interval with filters.team:null and limit:2; never spend separate home/away queries and leave the other interval incomplete. Use the same metric and population. Global orderedEndpoints use subjects:[]; one team/player scope uses one ID. difference ',
   'uses two teams or two players and returns counts, leader/tie and explicit margin. ',
   'orderedEndpoints returns both first and latest outcomes. ratio with passCompletionRate uses ',
   'subjects:[] for one combined accuracy across both teams, one team ID for that team, and ',
@@ -497,7 +498,7 @@ export const canonicalSelectionPolicy = [
   'anchor and the dependent query result from queryRelations.\nAnswer every supplied request ',
   'component and every attribute asked in the full question. Choose event-attribute facts when the ',
   'requested body part or technique is recorded; a generic event fact that omits that attribute is ',
-  'incomplete. General football knowledge must not establish a match event. Do not claim a final ',
+  'incomplete. A request for who performed an action and when needs the individual name and event timestamp; team totals do not answer either attribute, even for a goal. For separate time intervals, select one by-team comparison fact per interval and report ties or zeros directly. General football knowledge must not establish a match event. Do not claim a final ',
   'result, winner, official award or unavailable measurement. Write the optional paragraph in ',
   'responseLanguage, preserving names. No internal IDs, schema terminology or source machinery in ',
   'prose. Fill premiseCheck internally from the actual evidence without inventing an assumption ',
@@ -520,6 +521,7 @@ export const linkedActionCoveragePolicy = [
   'When a request includes both an observed action and unavailable causal attribution, coverage must cite the canonical action claim as well as its capability limitation. The limitation alone cannot establish an action.',
   'For an after-requested-event relation supported by a supplied recordedActionLinks entry, set relationSourceLinkIndex to that exact matching entry and include the canonical recovery claim. Match the actual requested anchor actor and event; do not choose a nearby action or infer first/next ordering from a source link.',
   'Coverage claimIndices include only claims that supply the requested information. A timing question is covered by the matching action time, not an extra claim about its foot or technique. Do not credit every true claim about that event as answering its requested time; leave unused attributes outside coverage.',
+  'Reject scorer-name/time requests answered with team goal totals. A who/when request has no requestedQuantity unless a count is separately requested. A neutral question about which team had more actions permits a tie or zero; it does not assert that both sides had actions, and does not require a premise correction. Compare each requested interval independently, including windows introduced in a preceding sentence.',
   'A previous-action follow-up refers to the action before the original latest source event, not that latest event again. Resolve the team and action type from the prior user request, require before ordering for the requested previous action, and reject an answer that repeats the anchor as its predecessor. A correct actor alone cannot satisfy the changed event selector.',
   'Classify temporalRelation separately for each request component. A clause asking whether a cause is known does not request before/after ordering merely because an earlier clause asks about a sequence. Use none for that causal-uncertainty clause. A source link proves sequence only, never forcing.',
 ].join(' ');

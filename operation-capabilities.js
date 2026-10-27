@@ -416,7 +416,7 @@ export function allowedOperationWindow(input = {}) {
   // Leave implicit periods and conversational relative windows to query planning,
   // rather than silently treating them as the whole received segment.
   if (
-    /\b(?:since|before|after|between|recently|half time|halftime|second half|first half|depuis|avant|apres|entre|desde|antes|despues|apos|intervalo|last few|past few|recent play)\b/u.test(
+    /\b(?:since|before|after|between|recently|half time|halftime|second half|first half|depuis|avant|apres|entre|desde|antes|despues|apos|intervalo|last few|past few|recent play|(?:first|second|third|fourth|fifth|premiere?|deuxieme|troisieme|primer[oa]?|segund[oa]|tercer[oa]?|primeir[oa])\s+(?:minute|minuto))\b/u.test(
       question,
     )
   )

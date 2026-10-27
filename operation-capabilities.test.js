@@ -1,4 +1,13 @@
 import test from 'node:test';
+test('ordinal minute comparisons never license a full-match operation window', () => {
+  for (const question of [
+    'Compare the first minute with the second minute. Which team had more shots in each?',
+    'Which team had more passes in the third minute?',
+    'Compare la première minute avec la deuxième minute.',
+    'Compara el primer minuto con el segundo minuto.',
+  ])
+    assert.equal(allowedOperationWindow({ question, time: 120 }), null);
+});
 import assert from 'node:assert/strict';
 import {
   requestedUnavailableMeasurements,
